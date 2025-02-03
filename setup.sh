@@ -12,7 +12,7 @@ else
      NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 fi
 
-brew install stow nvim ripgrep jesseduffield/lazygit/lazygit rbenv
+brew install stow fzf nvim ripgrep jesseduffield/lazygit/lazygit rbenv
 
 if [ -n "${CODESPACES-}" ]; then
   ./setup-codespaces.sh
