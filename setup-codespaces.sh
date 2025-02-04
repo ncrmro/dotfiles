@@ -6,7 +6,7 @@ if [ ! -d $HOME/dotfiles ]; then
   mv /workspaces/.codespaces/.persistedshare/dotfiles $HOME/dotfiles
 fi
 
-cd $HOME
+cd $HOME/dotfiles
 
 # Make passwordless sudo work
 export SUDO_ASKPASS=/bin/true
