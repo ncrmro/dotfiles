@@ -47,24 +47,32 @@ Make sure to install latest neovim `brew install neovim` and a font `brew instal
 
 Installing the `zsh.` will also add a nice theme and some plugins.
 
-When running nvim in a code dir. 
 
-The leader key `space` will bring up a menu with short cuts. For instance 
+## Keybindings
 
-- `space` then `f` (file) then
-  - side file explorer `e`
-  - fuzzy file search `f` 
-  - terminal `t`
-- short cut for git commands `:` then `G`
-  -  `G commit -m "fea: foobar"`
-- fold code under the cursor `z` then `c`
-- vertical windows split `w` then `v`
-- cut/copy/delete `v` to start "visual mode" (select text with arrow keys) then
-  - `y` to "yank" copy
-  - `p` to paste
-  - `d` to delete
-- When you have multiple files open they are called "buffers" (tabs are diffrent)
-  -  `space` then `,` will bring up a fuzzy search of your buffers
-  - `space` then `b` will allow you to open/close switch buffers.
-- To comment code out press `v` and select lines.
-  - then `gc`  
+The leader key is `space`, which opens a menu with shortcuts:
+
+- **File Operations:**
+  - `space` + `f`:
+    - `e`: Open side file explorer
+    - `f`: Fuzzy file search
+    - `t`: Open terminal
+- **Git Commands:**
+  - `:` + `G`: Open git command menu
+    - Example: `G commit -m "fea: foobar"`
+  - `space` + `g` + `g`: Open lazygit
+- **Code Folding:**
+  - `z` + `c`: Fold code under the cursor
+- **Window Management:**
+  - `w` + `v`: Vertical window split
+- **Text Operations:**
+  - `v`: Enter visual mode (use arrow keys to select text)
+    - `y`: Yank (copy)
+    - `p`: Paste
+    - `d`: Delete
+- **Buffer Management:**
+  - `space` + `,`: Fuzzy search buffers
+  - `space` + `b`: Open/close/switch buffers
+- **Commenting Code:**
+  - `v`: Select lines in visual mode
+  - `gc`: Comment out selected lines
