@@ -66,3 +66,5 @@ The leader key `space` will bring up a menu with short cuts. For instance
 - When you have multiple files open they are called "buffers" (tabs are diffrent)
   -  `space` then `,` will bring up a fuzzy search of your buffers
   - `space` then `b` will allow you to open/close switch buffers.
+- To comment code out press `v` and select lines.
+  - then `gc`  
