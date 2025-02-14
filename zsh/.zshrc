@@ -23,6 +23,10 @@ plugins=(
 
 source $ZSH/oh-my-zsh.sh
 
+if [[ -f "${HOME}/.secrets.sh" ]]; then
+  source ${HOME}/.secrets.sh
+fi
+
 if [[ -f "/home/linuxbrew/.linuxbrew/bin/brew" ]]; then
     eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
 fi
