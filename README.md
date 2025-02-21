@@ -76,3 +76,6 @@ The leader key is `space`, which opens a menu with shortcuts:
 - **Commenting Code:**
   - `v`: Select lines in visual mode
   - `gc`: Comment out selected lines
+- **Indenting Multiple Lines:**
+  - `v`: Select lines in visual mode
+  - `shift` + `<` or `>` (left or right)
