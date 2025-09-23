@@ -12,7 +12,9 @@ allowed-tools: mcp__github__list_issues, mcp__github__list_pull_requests, mcp__g
 
 ## Your task
 
-Get an overview of project status including issues, pull requests, and recent activity by:
+Use the project-manager subagent to analyze the current project and provide a comprehensive status report.
+
+The project-manager subagent should get an overview of project status including issues, pull requests, and recent activity by:
 
 1. Determine target repository/repositories:
    - If no parameter provided: Use `!pwd` to get current working directory and map to repository using /home/ncrmro/code/ncrmro/obsidian/projects/README.md
@@ -47,3 +49,9 @@ Get an overview of project status including issues, pull requests, and recent ac
    - PRs ready for your review
    - Your PRs needing attention
    - Upcoming deadlines or blockers
+
+The project-manager subagent will provide additional insights including:
+- Git status and uncommitted changes
+- Project structure and health assessment
+- Documentation completeness
+- Testing status when available

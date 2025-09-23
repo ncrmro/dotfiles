@@ -20,6 +20,7 @@ Update today's journal entry based on yesterday's tasks and provide a timeboxed 
    - Identify completed tasks marked with [x]
    - Identify uncompleted tasks marked with [ ]
    - Note project and repository tags (lines starting with #)
+   - For tasks mentioning PRs, check PR status (draft, tests passing, review status)
 
 2. Create or update today's journal:
    - Move ONLY completed tasks ([x]) from yesterday's "Today" section to today's "Yesterday" section
@@ -34,7 +35,25 @@ Update today's journal entry based on yesterday's tasks and provide a timeboxed 
    - Projects as markdown headers (e.g., `#### #Catalyst`) with blank line after
    - Repository tags as bullet points under project headers (e.g., `- #owner/repo`)
    - Tasks as checkboxes under repositories (e.g., `- [ ] task description`)
+   - For each ticket/task, include one bullet point explaining why it's [still] on the list:
+     * For PRs: check and include status (draft, tests failing, awaiting review, ready to merge)
+     * For development tasks: next concrete action needed  
+     * For blocked items: specific blocker and resolution path
    - Preserve any existing content in today's journal that was manually added
+
+   **Example journal structure:**
+   ```markdown
+   #### #ProjectName
+   
+   - #owner/repository
+     - [ ] Fix authentication bug in login flow
+       - Next: investigate JWT token validation logic
+     - [ ] Review PR #456 - Add user preferences API endpoint  
+       - Status: PR ready to merge, tests passing, approved
+     - [ ] Merge PR #123 - Authentication improvements
+       - Status: PR draft, tests failing on login endpoint
+     - [x] Complete code review for PR #789
+   ```
 
 4. Generate timeboxed daily overview:
    - Calculate available hours (default: 8 hours if not specified)
@@ -50,6 +69,12 @@ Update today's journal entry based on yesterday's tasks and provide a timeboxed 
    - List top 3 priorities
    - Identify any carried-over blockers
    - Suggest focus areas based on task urgency
+
+6. Ask for clarification:
+   - For any items where status couldn't be determined automatically
+   - For tasks that lack clear next steps
+   - For blockers that may have been resolved
+   - Present these as specific questions to help refine the journal
 
 ## Example timeboxed overview format
 
