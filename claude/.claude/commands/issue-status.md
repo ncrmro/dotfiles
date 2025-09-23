@@ -1,7 +1,7 @@
 ---
-description: Get GitHub issue status for current directory's repository
-argument-hint: "<issue_number>"
-allowed-tools: mcp__github__get_issue, mcp__github__get_issue_comments
+description: Get GitHub issue and pull request status for current directory's repository
+argument-hint: "<issue_or_pr_number>"
+allowed-tools: mcp__github__get_issue, mcp__github__get_issue_comments, mcp__github__get_pull_request, mcp__github__get_pull_request_status, mcp__github__list_pull_requests
 ---
 
 ## Context
@@ -12,7 +12,7 @@ allowed-tools: mcp__github__get_issue, mcp__github__get_issue_comments
 
 ## Your task
 
-Get the status and details of a GitHub issue in the current directory's repository by:
+Get the status and details of a GitHub issue or pull request in the current directory's repository by:
 
 1. Determine repository from current directory:
    - Use `!pwd` to get current working directory
@@ -28,10 +28,28 @@ Get the status and details of a GitHub issue in the current directory's reposito
      - Comments count
      - Creation and last update dates
 
-3. Present comprehensive issue information:
+3. Check for associated pull requests:
+   - Search for pull requests that reference this issue
+   - For each related PR, fetch:
+     - PR number, title, and status (open/merged/closed)
+     - Review status (approved/changes requested/pending)
+     - CI/CD check status (passing/failing)
+     - Merge conflicts status
+     - Author and reviewers
+
+4. Present comprehensive information:
    - Show issue URL, number, title, and status
    - Display assignees and labels if any
    - Show creation and last update timestamps
    - Include direct link for easy access
+   - If pull requests exist:
+     - List each PR with its status
+     - Show review approval status
+     - Indicate CI/CD check results
+     - Note any merge conflicts
+     - Provide direct links to PRs
 
-4. Optional: Show recent comments if requested or if there are important updates
+5. Summary:
+   - Provide a brief summary of the overall status
+   - Highlight any blockers (failing tests, requested changes, conflicts)
+   - Indicate if the issue is ready to close or needs attention
