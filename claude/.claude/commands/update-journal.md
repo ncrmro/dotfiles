@@ -23,9 +23,10 @@ Update today's journal entry based on yesterday's tasks and provide a timeboxed 
    - For tasks mentioning PRs, check PR status (draft, tests passing, review status)
 
 2. Create or update today's journal:
-   - Move ONLY completed tasks ([x]) from yesterday's "Today" section to today's "Yesterday" section
-     * DO NOT copy yesterday's "Yesterday" section
-     * Extract only [x] marked tasks from yesterday's "Today" section
+   - Copy ONLY completed tasks ([x]) from yesterday's "Today" section to today's "Yesterday" section
+     * **NEVER** copy anything from the previous days "Yesterday" section - ignore it completely
+     * **ONLY** extract [x] marked tasks from yesterday's "Today" section
+     * **SOURCE**: Yesterday's "Today" section → **DESTINATION**: Today's "Yesterday" section
      * Simplify by removing strikethrough and excessive nesting
    - Carry forward uncompleted tasks ([ ]) from yesterday's "Today" to today's "Today" section
    - Preserve the project/repository hierarchy structure (#ProjectTag -> #owner/repo -> tasks)
@@ -53,6 +54,29 @@ Update today's journal entry based on yesterday's tasks and provide a timeboxed 
      - [ ] Merge PR #123 - Authentication improvements
        - Status: PR draft, tests failing on login endpoint
      - [x] Complete code review for PR #789
+   ```
+
+   **Example of correct task copying behavior:**
+   
+   Yesterday's Journal (2025-01-15):
+   ```markdown
+   ## Yesterday 
+   - [x] Some old completed task  ← IGNORE THIS COMPLETELY
+
+   ## Today
+   - [x] Fix login bug
+   - [ ] Review PR #123
+   - [x] Deploy to staging 
+   ```
+   
+   Today's Journal (2025-01-16):
+   ```markdown
+   ## Yesterday  ← Only copy completed tasks from yesterday's "Today"
+   - [x] Fix login bug
+   - [x] Deploy to staging
+   
+   ## Today  ← Copy uncompleted tasks from yesterday's "Today"  
+   - [ ] Review PR #123
    ```
 
 4. Generate timeboxed daily overview:
