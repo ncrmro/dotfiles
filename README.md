@@ -4,6 +4,28 @@ Largely inspired by Paul's [dotfiles](https://github.com/paul/dotfiles).
 
 This repository contains configuration files (dotfiles) for various tools and applications. By using [GNU Stow](https://www.gnu.org/software/stow/), these configurations can easily be managed and deployed across different systems.
 
+On NixOS, `ncrmro/ks-config` provisions each tool and its dependencies while
+this repository owns the editable configuration. The NixOS layout lives under
+`packages/`, with one Stow package per tool:
+
+```text
+packages/
+  git/       .config/git/config
+  ssh/       .ssh/config
+  hyprland/  .config/hypr/hyprland.conf
+```
+
+Home Manager restows the selected packages during activation. To do the same
+manually:
+
+```shell
+./install.sh
+./install.sh git ssh
+```
+
+Configuration in `packages/` should refer to dependencies by executable name,
+not by `/nix/store` path, so Nix can continue to own dependency provisioning.
+
 # Stow
 
 GNU Stow is a symlink manager that simplifies the management of dotfiles by creating symbolic links from a central directory (this repository) to their target locations in your home directory. This keeps your configurations organized and portable.
@@ -22,7 +44,7 @@ brew install stow ripgrep jesseduffield/lazygit/lazygit
 
 Then clone this repo somewhere. Then unstow a configuration. (Not it will error if any files would be overwritten)
 
-For instance running 
+For instance running
 
 ```shell
 stow nvim
@@ -34,9 +56,9 @@ Will create the following symslink
 ./dotfiles/nvim/.config/nvim -> ~/.config/nvim
 ```
 
-# Moving new configs 
+# Moving new configs
 
-Create a new directory in the dotfile repo and commit, then running stow will symlink them back into the correct dir!.
+Create a new directory in the dotfile repo and commit, then running stow will symlink them back into the correct dir!
 
 
 # NVIM
