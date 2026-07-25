@@ -12,7 +12,7 @@ this repository owns the editable configuration. The NixOS layout lives under
 packages/
   git/       .config/git/config
   ssh/       .ssh/config
-  hyprland/  .config/hypr/hyprland.conf
+  hyprland/  .config/hypr/ncrmro.conf
 ```
 
 Home Manager restows the selected packages during activation. To do the same
