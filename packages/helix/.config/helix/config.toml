@@ -1,0 +1,22 @@
+theme = "kinda_nvim"
+
+[editor]
+clipboard-provider = "wayland"
+line-number = "absolute"
+mouse = true
+text-width = 120
+
+[editor.cursor-shape]
+insert = "bar"
+normal = "block"
+select = "underline"
+
+[editor.soft-wrap]
+enable = true
+wrap-at-text-width = true
+
+[keys.normal]
+F6 = ["select_all", ":pipe helix-preview-markdown", "collapse_selection"]
+F7 = ":toggle soft-wrap.enable"
+ret = ":write"
+
