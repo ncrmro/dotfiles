@@ -3,7 +3,7 @@ set -euo pipefail
 
 repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 desktop=(
-  bat btop clipse ghostty helix satty walker waybar wofi zellij
+  bat btop clipse ghostty helix satty themes walker waybar wofi zellij
   hyprland-common
 )
 
