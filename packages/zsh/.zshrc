@@ -5,7 +5,7 @@ done
 
 HELPDIR="/run/current-system/sw/share/zsh/$ZSH_VERSION/help"
 
-source "/etc/profiles/per-user/$USER/share/zsh-autosuggestions/zsh-autosuggestions.zsh"
+source "/etc/profiles/per-user/$USER/share/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh"
 ZSH_AUTOSUGGEST_STRATEGY=(history)
 
 

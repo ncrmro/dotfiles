@@ -80,6 +80,11 @@ tooltip {
   padding: 0 8px;
 }
 
+#custom-voice-memo {
+  min-width: 20px;
+  padding: 0 8px;
+}
+
 #custom-screenrecording-indicator.active {
   color: #ef5350;
   font-weight: bold;

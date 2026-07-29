@@ -68,6 +68,11 @@
       "on-click-right": "ghostty",
       "tooltip-format": "Keystone Desktop"
     },
+    "custom/voice-memo": {
+      "format": "󰍬",
+      "on-click": "ghostty --class=com.ncrmro.voice-memo -e voice-memo",
+      "tooltip-format": "Record and transcribe a voice memo"
+    },
     "custom/screenrecording-indicator": {
       "exec": "pgrep -f '[g]pu-screen-recorder' >/dev/null && echo '{\"text\": \"󰻂\", \"tooltip\": \"Stop recording\", \"class\": \"active\"}' || echo '{\"text\": \"\"}'",
       "on-click": "keystone-screenrecord",
@@ -100,6 +105,7 @@
     "layer": "top",
     "modules-center": [
       "clock",
+      "custom/voice-memo",
       "custom/screenrecording-indicator"
     ],
     "modules-left": [
