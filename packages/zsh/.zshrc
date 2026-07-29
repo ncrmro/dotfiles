@@ -143,12 +143,14 @@ eval "$(direnv hook zsh)"
 
 # NixOS rebuild helper with --boot support for boot-critical changes.
 update() {
+  local host
   local cmd="switch"
+  host="$(hostname)"
   if [[ "$1" == "--boot" ]]; then
     cmd="boot"
     shift
   fi
-  sudo nixos-rebuild "$cmd" --flake ~/repos/ncrmro/ks-config#ks-test-delltop "$@"
+  sudo nixos-rebuild "$cmd" --flake "$HOME/repos/ncrmro/ks-config#$host" "$@"
   if [[ "$cmd" == "boot" ]]; then
     echo "Reboot required to apply changes."
   fi
@@ -169,5 +171,4 @@ alias -- zs='zesh connect'
 alias -- ztab='zellij action rename-tab'
 source "/etc/profiles/per-user/$USER/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"
 ZSH_HIGHLIGHT_HIGHLIGHTERS+=()
-
 
