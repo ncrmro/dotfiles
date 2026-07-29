@@ -10,9 +10,10 @@ this repository owns the editable configuration. The NixOS layout lives under
 
 ```text
 packages/
-  git/       .config/git/config
-  ssh/       .ssh/config
-  hyprland/  .config/hypr/ncrmro.conf
+  git/              .config/git/config
+  ssh/              .ssh/config
+  hyprland-common/  .config/hypr/hyprland.conf
+  themes/           .config/keystone/themes/
 ```
 
 Home Manager restows the selected packages during activation. To do the same
@@ -21,10 +22,14 @@ manually:
 ```shell
 ./install.sh
 ./install.sh git ssh
+./install.sh --check themes
 ```
 
 Configuration in `packages/` should refer to dependencies by executable name,
 not by `/nix/store` path, so Nix can continue to own dependency provisioning.
+The `themes` package owns the editable desktop palettes and backgrounds.
+Keystone may switch the active theme and reload applications, but it does not
+generate or replace these files.
 
 # Stow
 
