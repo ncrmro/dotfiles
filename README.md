@@ -13,7 +13,7 @@ packages/
   git/              .config/git/config
   ssh/              .ssh/config
   hyprland-common/  .config/hypr/hyprland.conf
-  themes/           .config/keystone/themes/
+  themes/           .config/themes/
 ```
 
 Home Manager restows the selected packages during activation. To do the same
