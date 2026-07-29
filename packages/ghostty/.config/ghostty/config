@@ -1,5 +1,5 @@
 background-opacity = 0.950000
-config-file = /home/ncrmro/.config/keystone/current/theme/ghostty.conf
+config-file = /home/ncrmro/.config/themes/current/ghostty.conf
 confirm-close-surface = false
 cursor-style = block
 cursor-style-blink = false
