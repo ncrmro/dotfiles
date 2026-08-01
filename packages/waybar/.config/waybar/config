@@ -68,6 +68,12 @@
       "on-click-right": "ghostty",
       "tooltip-format": "Keystone Desktop"
     },
+    "custom/disk-health": {
+      "exec": "keystone-disk-monitor waybar",
+      "interval": 30,
+      "return-type": "json",
+      "tooltip": true
+    },
     "custom/voice-memo": {
       "format": "󰍬",
       "on-click": "ghostty --class=com.ncrmro.voice-memo -e voice-memo",
@@ -118,6 +124,7 @@
       "network",
       "pulseaudio",
       "cpu",
+      "custom/disk-health",
       "battery"
     ],
     "network": {
