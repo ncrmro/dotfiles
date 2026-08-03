@@ -8,8 +8,6 @@ theme = "keystone"
 [keybinds]
 next = ["Down"]
 previous = ["Up"]
-quick_activate = []
-show_actions = []
 
 [placeholders.default]
 input = " Search..."
