@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# claude-work — Claude Code signed in to the work account.
+#
+# The work account keeps its own config dir so each account holds its own
+# credentials. The session-bearing paths inside it are symlinks to ~/.claude, so
+# `--resume` and `--continue` list the same sessions whether a session was
+# started with `claude` or `claude-work`.
+set -euo pipefail
+
+main="$HOME/.claude"
+work="$HOME/.claude-work"
+
+# Paths that carry session state: transcripts, the resume index, prompt history,
+# and the artifacts a transcript refers to. Everything else in the config dir
+# (.claude.json, .credentials.json, daemon, cache, telemetry) stays per-account.
+shared=(
+  projects sessions file-history backups paste-cache
+  shell-snapshots plans tasks session-env history.jsonl
+)
+
+# Fast path: bash builtins only, no subprocesses. Measured at 0.046 ms for all
+# ten paths; forking readlink per path would cost 17 ms. The repair path runs
+# only when a link is actually missing.
+needs_repair=0
+for p in "${shared[@]}"; do
+  if [ ! -L "$work/$p" ]; then
+    needs_repair=1
+    break
+  fi
+done
+
+if [ "$needs_repair" = 1 ]; then
+  mkdir -p "$work"
+  for p in "${shared[@]}"; do
+    [ -e "$main/$p" ] || continue # nothing to share yet
+    if [ -L "$work/$p" ]; then continue; fi
+    if [ -e "$work/$p" ]; then
+      printf 'claude-work: %s holds real data, not a link to %s; merge it by hand.\n' \
+        "$work/$p" "$main/$p" >&2
+      continue
+    fi
+    ln -s "$main/$p" "$work/$p"
+  done
+fi
+
+exec env CLAUDE_CONFIG_DIR="$work" claude "$@"
