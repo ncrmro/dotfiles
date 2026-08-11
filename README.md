@@ -10,6 +10,7 @@ this repository owns the editable configuration. The NixOS layout lives under
 
 ```text
 packages/
+  bin/              .local/bin/
   git/              .config/git/config
   ssh/              .ssh/config
   hyprland-common/  .config/hypr/hyprland.conf
@@ -30,6 +31,32 @@ not by `/nix/store` path, so Nix can continue to own dependency provisioning.
 The `themes` package owns the editable desktop palettes and backgrounds.
 Keystone may switch the active theme and reload applications, but it does not
 generate or replace these files.
+
+## packages/bin — small shell scripts
+
+Scripts that need nothing but a shell and coreutils live in
+`packages/bin/.local/bin/` and stow onto `$HOME/.local/bin`, which is already on
+PATH. Prefer this to a Nix wrapper or a Home Manager activation block when a
+script has no dependencies to provision: it stays plain text, editable in place,
+and testable by running it.
+
+- Start with `#!/usr/bin/env bash` and `set -euo pipefail`, and commit the file
+  executable (`chmod +x`).
+- Call tools by bare name, never by `/nix/store` path — Nix owns provisioning.
+- Keep the script idempotent. It may run on every invocation.
+- If a script grows a real dependency, add it to the `bin` entry in the
+  `toolDeps` manifest in `ks-config` rather than hardcoding a path.
+
+Because `install.sh` stows with `--no-folding`, `$HOME/.local/bin` stays a real
+directory and only the individual scripts inside it become symlinks. Anything
+else already installed there (for example a `claude` launcher) is left alone.
+
+Current scripts:
+
+- `claude-work` — runs Claude Code against the work account's config dir
+  (`~/.claude-work`) so it keeps its own credentials, while linking the
+  session-bearing paths in that dir to `~/.claude`. `--resume` and `--continue`
+  then list the same sessions under both `claude` and `claude-work`.
 
 # Stow
 

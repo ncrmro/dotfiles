@@ -35,9 +35,15 @@ stow nvim ruby zsh git
 ## Architecture
 
 ### Directory Structure
-- `nvim/` - Neovim configuration with LazyVim framework
-- `zsh/` - Zsh shell configuration with oh-my-zsh and plugins
-- `git/` - Git configuration with useful aliases
+- `packages/` - the NixOS layout: one Stow package per tool, restowed by Home
+  Manager on activation via `install.sh` (see README.md). New work goes here.
+- `packages/bin/` - plain shell scripts, stowed onto `$HOME/.local/bin`. Use
+  this for a script that needs nothing but a shell and coreutils, instead of a
+  Nix wrapper or a Home Manager activation block. Details in README.md.
+- `nvim/` - Neovim configuration with LazyVim framework (legacy top-level package)
+- `zsh/` - Zsh shell configuration with oh-my-zsh and plugins (legacy; the
+  NixOS-era config is `packages/zsh/`)
+- `git/` - Git configuration with useful aliases (legacy; see `packages/git/`)
 - `ruby/` - Ruby version specification (3.3.4)
 
 ### Key Configuration Files

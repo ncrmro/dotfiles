@@ -8,12 +8,15 @@ desktop=(
 )
 
 compositions=(
+  # Mirrors dotfiles.packages per host in ks-config. Mercury is infrastructure,
+  # not a development host, and keeps its own three-package list; maia does not
+  # import the dotfiles module at all. Neither gets `bin`.
   "maia:git ssh zsh"
   "mercury:git ssh zsh"
-  "ocean:git ssh zsh"
-  "ncrmro-workstation:git ssh zsh ${desktop[*]} hyprland-workstation"
-  "ncrmro-laptop:git ssh zsh ${desktop[*]} hyprland-laptop"
-  "ks-test-delltop:git ssh zsh ${desktop[*]} hyprland-delltop"
+  "ocean:bin git ssh zsh"
+  "ncrmro-workstation:bin git ssh zsh ${desktop[*]} hyprland-workstation"
+  "ncrmro-laptop:bin git ssh zsh ${desktop[*]} hyprland-laptop"
+  "ks-test-delltop:bin git ssh zsh ${desktop[*]} hyprland-delltop"
 )
 
 for composition in "${compositions[@]}"; do
