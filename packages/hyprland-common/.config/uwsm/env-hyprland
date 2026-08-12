@@ -1,0 +1,3 @@
+# Hyprland-specific cursor settings belong to the compositor process.
+export HYPRCURSOR_SIZE=24
+export HYPRCURSOR_THEME=Adwaita
