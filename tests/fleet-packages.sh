@@ -30,3 +30,17 @@ for composition in "${compositions[@]}"; do
   trap - EXIT
   printf 'ok: %s\n' "${host}"
 done
+
+hypridle_conf="${repo_dir}/packages/hyprland-common/.config/hypr/hypridle.conf"
+hyprland_conf="${repo_dir}/packages/hyprland-common/.config/hypr/hyprland.conf"
+
+grep -Fxq '  before_sleep_cmd=keystone-lock --fail-closed' "${hypridle_conf}"
+grep -Fxq '  inhibit_sleep=3' "${hypridle_conf}"
+grep -Fxq '  lock_cmd=keystone-lock' "${hypridle_conf}"
+grep -Fxq '  on-timeout=keystone-lock' "${hypridle_conf}"
+grep -Fxq '  timeout=300' "${hypridle_conf}"
+grep -Fxq '  after_sleep_cmd=keystone-dpms-wake || (hyprctl dispatch dpms on && brightnessctl -r)' "${hypridle_conf}"
+grep -Fxq '  on-resume=keystone-dpms-wake || (hyprctl dispatch dpms on && brightnessctl -r)' "${hypridle_conf}"
+grep -Fxq 'bindl=, switch:on:Lid Switch, exec, keystone-lock --fail-closed && systemctl suspend' "${hyprland_conf}"
+! grep -Fq 'pidof hyprlock' "${hypridle_conf}" "${hyprland_conf}"
+printf 'ok: lock hooks\n'
