@@ -13,7 +13,8 @@ packages/
   bin/              .local/bin/
   git/              .config/git/config
   ssh/              .ssh/config
-  hyprland-common/  .config/hypr/hyprland.conf
+  hyprland-common/  .config/hypr/hyprland.lua
+                    .config/uwsm/{env,env-hyprland}
   themes/           .config/themes/
 ```
 
@@ -31,6 +32,44 @@ not by `/nix/store` path, so Nix can continue to own dependency provisioning.
 The `themes` package owns the editable desktop palettes and backgrounds.
 Keystone may switch the active theme and reload applications, but it does not
 generate or replace these files.
+
+## Hyprland and UWSM
+
+Hyprland 0.56 loads `~/.config/hypr/hyprland.lua`. The common package owns the
+base settings, typed dispatchers, binds, and rules. It loads these optional
+customizations in this order:
+
+1. `~/.config/themes/current/hyprland.lua`
+2. `~/.config/hypr/user.lua`
+3. `~/.config/hypr/host.lua`
+
+The theme uses `loadfile` and `pcall`. A theme error is isolated and the base
+configuration remains valid. The user and host modules use protected `require`
+calls. Hyprland 0.56 diagnoses a missing module. It also records a module parse
+or runtime error as a configuration error, even when `pcall` catches it. The
+base policy loads before these modules. Keystone's startup lock gates the
+remaining graphical services.
+
+Each graphical host adds one host package:
+
+- `hyprland-workstation` provides the workstation monitor and defaults.
+- `hyprland-laptop` provides the laptop panel.
+- `hyprland-delltop` provides the test-laptop monitor fallback.
+
+Theme directories that customize Hyprland provide `hyprland.lua`. The active
+theme selector points `~/.config/themes/current` at one theme directory. A
+normal `./install.sh` restow removes obsolete `hyprland.conf`, `ncrmro.conf`,
+and `host.conf` links after this migration.
+
+UWSM owns the session environment. It reads `.config/uwsm/env` before the
+graphical session and `.config/uwsm/env-hyprland` for Hyprland-specific values.
+Do not add manual systemd or D-Bus environment imports to `hyprland.lua`.
+Graphical launch binds use `uwsm app --`. Keystone's systemd user units own
+persistent background processes.
+
+Hyprland ecosystem tools keep their own Hyprlang files. These files are
+`hypridle.conf`, `hyprlock.conf`, `hyprpaper.conf`, `hyprsunset.conf`, and
+`xdph.conf`.
 
 ## packages/bin — small shell scripts
 
