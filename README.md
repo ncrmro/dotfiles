@@ -33,6 +33,11 @@ The `themes` package owns the editable desktop palettes and backgrounds.
 Keystone may switch the active theme and reload applications, but it does not
 generate or replace these files.
 
+Each desktop theme provides `zellij.kdl` and defines its palette as `current`.
+The palettes match the Zellij v0.44.3 built-in themes selected before this
+migration. Zellij v0.44.3 has no Rosé Pine theme, so the `rose-pine` directory
+provides the Rosé Pine Dawn palette that the local desktop theme uses.
+
 ## Hyprland and UWSM
 
 Hyprland 0.56 loads `~/.config/hypr/hyprland.lua`. The common package owns the

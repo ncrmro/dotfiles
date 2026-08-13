@@ -70,6 +70,41 @@ for composition in "${compositions[@]}"; do
   printf 'ok: %s\n' "${host}"
 done
 
+themes_dir="${repo_dir}/packages/themes/.config/themes"
+mapfile -t theme_dirs < <(find "${themes_dir}" -mindepth 1 -maxdepth 1 -type d | sort)
+test "${#theme_dirs[@]}" -eq 15
+! find "${themes_dir}" -name zellij.conf -type f | grep -q .
+! test -e "${repo_dir}/packages/zellij/.config/zellij/themes/royal-green.kdl"
+
+for theme_dir in "${theme_dirs[@]}"; do
+  theme_name="$(basename "${theme_dir}")"
+  theme_file="${theme_dir}/zellij.kdl"
+  test -f "${theme_file}"
+  grep -Eq '^[[:space:]]*current[[:space:]]*\{' "${theme_file}"
+
+  if command -v zellij >/dev/null 2>&1; then
+    zellij_home="$(mktemp -d)"
+    trap 'rm -rf "${zellij_home}"' EXIT
+    mkdir -p "${zellij_home}/.config/zellij/themes"
+    ln -s "${repo_dir}/packages/zellij/.config/zellij/config.kdl" \
+      "${zellij_home}/.config/zellij/config.kdl"
+    ln -s "${theme_file}" \
+      "${zellij_home}/.config/zellij/themes/current.kdl"
+    HOME="${zellij_home}" \
+      XDG_CACHE_HOME="${zellij_home}/.cache" \
+      XDG_CONFIG_HOME="${zellij_home}/.config" \
+      XDG_DATA_HOME="${zellij_home}/.local/share" \
+      XDG_STATE_HOME="${zellij_home}/.local/state" \
+      zellij setup --check >/dev/null
+    rm -rf "${zellij_home}"
+    trap - EXIT
+  fi
+
+  printf 'ok: Zellij theme %s\n' "${theme_name}"
+done
+
+printf 'ok: Zellij theme contract\n'
+
 hypridle_conf="${repo_dir}/packages/hyprland-common/.config/hypr/hypridle.conf"
 hyprland_lua="${repo_dir}/packages/hyprland-common/.config/hypr/hyprland.lua"
 uwsm_env="${repo_dir}/packages/hyprland-common/.config/uwsm/env"
