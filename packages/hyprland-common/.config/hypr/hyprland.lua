@@ -60,7 +60,65 @@ hl.bind(mod .. " + B", exec(app .. "chromium --new-window --ozone-platform=wayla
 hl.bind(mod .. " + E", exec(app .. "nautilus --new-window"))
 hl.bind(mod .. " + Escape", exec(app .. "keystone-menu system"))
 hl.bind(mod .. " + K", exec(app .. "keystone-menu-keybindings"))
-hl.bind(mod .. " + W", hl.dsp.window.close())
+
+local protected_browser_classes = {
+  ["chromium"] = true,
+  ["chromium-browser"] = true,
+  ["google-chrome"] = true,
+  ["google-chrome-beta"] = true,
+  ["google-chrome-dev"] = true,
+  ["google-chrome-unstable"] = true,
+}
+local pending_close_window
+local pending_close_notification
+
+local function clear_pending_close()
+  if pending_close_notification then
+    pending_close_notification:dismiss()
+  end
+  pending_close_window = nil
+  pending_close_notification = nil
+end
+
+local function close_window_on_press()
+  clear_pending_close()
+
+  local window = hl.get_active_window()
+  if not window then
+    return
+  end
+
+  if protected_browser_classes[window.class] then
+    pending_close_window = window
+    pending_close_notification = hl.notification.create({
+      text = "Hold Mod+W to close Chrome",
+      timeout = 1500,
+    })
+    return
+  end
+
+  hl.dispatch(hl.dsp.window.close({ window = window }))
+end
+
+local function close_window_on_long_press()
+  local window = pending_close_window
+  if window and window.mapped and protected_browser_classes[window.class] then
+    hl.dispatch(hl.dsp.window.close({ window = window }))
+  end
+  clear_pending_close()
+end
+
+local function close_window_on_release()
+  clear_pending_close()
+end
+
+hl.bind(mod .. " + W", close_window_on_press)
+hl.bind(mod .. " + W", close_window_on_long_press, { long_press = true })
+hl.bind(mod .. " + W", close_window_on_release, {
+  release = true,
+  ignore_mods = true,
+  non_consuming = true,
+})
 hl.bind("CTRL + ALT + DELETE", hl.dsp.window.close({ window = "address:.*" }))
 hl.bind(mod .. " + SHIFT + V", hl.dsp.window.float({ action = "toggle" }))
 hl.bind(mod .. " + P", hl.dsp.window.pseudo())

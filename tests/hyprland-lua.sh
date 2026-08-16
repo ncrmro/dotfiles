@@ -18,6 +18,13 @@ trap 'rm -rf "${test_root}"' EXIT
 ln -s "${hyprland_bin}" "${test_root}/Hyprland"
 verify_hyprland_bin="${test_root}/Hyprland"
 
+if [[ -n "${LUA_BIN:-}" ]]; then
+  lua_bin="${LUA_BIN}"
+else
+  lua_out="$(nix build --no-link --print-out-paths nixpkgs#lua5_4)"
+  lua_bin="${lua_out}/bin/lua"
+fi
+
 version_output="$("${hyprland_bin}" --version 2>&1)"
 grep -Fq 'Hyprland 0.56.0 ' <<<"${version_output}" \
   && grep -Fq "commit ${hyprland_rev} " <<<"${version_output}" || {
@@ -104,3 +111,17 @@ grep -Fq 'require("host"):' <<<"${host_output}"
 grep -Fq 'broken host' <<<"${host_output}"
 ! grep -Fq 'config ok' <<<"${host_output}"
 printf 'ok: invalid host is a diagnosed config error\n'
+
+close_binding="${test_root}/chrome-hold-close.lua"
+awk '
+  /^local protected_browser_classes = {/ { capture = 1 }
+  /^hl.bind\("CTRL \+ ALT \+ DELETE"/ { capture = 0 }
+  capture
+' "${repo_dir}/packages/hyprland-common/.config/hypr/hyprland.lua" \
+  >"${close_binding}"
+test "$(grep -Ec '^  \["[^"]+"\] = true,$' "${close_binding}")" -eq 6
+! grep -Fq 'hl.bind(mod .. " + W", hl.dsp.window.close())' \
+  "${repo_dir}/packages/hyprland-common/.config/hypr/hyprland.lua"
+! grep -Eq 'walker|mako|notify-send|exec\(|os\.execute|io\.popen' \
+  "${close_binding}"
+"${lua_bin}" "${repo_dir}/tests/hyprland-close.lua" "${close_binding}"
