@@ -1,7 +1,6 @@
-theme = "kinda_nvim"
+theme = "current"
 
 [editor]
-clipboard-provider = "wayland"
 line-number = "absolute"
 mouse = true
 text-width = 120
@@ -19,4 +18,3 @@ wrap-at-text-width = true
 F6 = ["select_all", ":pipe helix-preview-markdown", "collapse_selection"]
 F7 = ":toggle soft-wrap.enable"
 ret = ":write"
-
