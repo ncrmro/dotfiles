@@ -169,6 +169,9 @@ alias -- ls='eza -1l'
 alias -- y=yazi
 alias -- zs='zesh connect'
 alias -- ztab='zellij action rename-tab'
+for keystone_fragment in "$HOME/.config/keystone/shell.d"/*.zsh(N); do
+  source "$keystone_fragment"
+done
+unset keystone_fragment
 source "/etc/profiles/per-user/$USER/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"
 ZSH_HIGHLIGHT_HIGHLIGHTERS+=()
-
