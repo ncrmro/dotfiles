@@ -80,14 +80,36 @@ grep -Fxq '  inhibit_sleep=3' "${hypridle_conf}"
 grep -Fxq '  lock_cmd=keystone-lock' "${hypridle_conf}"
 grep -Fxq '  on-timeout=keystone-lock' "${hypridle_conf}"
 grep -Fxq '  timeout=300' "${hypridle_conf}"
-grep -Fxq '  after_sleep_cmd=keystone-dpms-wake || (hyprctl dispatch dpms on && brightnessctl -r)' "${hypridle_conf}"
-grep -Fxq '  on-resume=keystone-dpms-wake || (hyprctl dispatch dpms on && brightnessctl -r)' "${hypridle_conf}"
+# `set -e` does NOT abort on a `!`-negated command, so every negative
+# assertion here must go through refute() or it silently passes forever.
+refute() {
+  local why="$1"
+  shift
+  if grep "$@" >/dev/null; then
+    printf 'FAIL: %s\n' "${why}" >&2
+    grep -n "$@" >&2 || true
+    exit 1
+  fi
+}
+
+# hyprctl takes Lua since Hyprland 0.56, so a bareword `dispatch dpms on` is a
+# syntax error every caller here swallows. Pin the hl.dsp.* form.
+grep -Fxq '  after_sleep_cmd=keystone-dpms-wake || (hyprctl dispatch '"'"'hl.dsp.dpms({ action = "on" })'"'"' && brightnessctl -r)' "${hypridle_conf}"
+grep -Fxq '  on-resume=keystone-dpms-wake || (hyprctl dispatch '"'"'hl.dsp.dpms({ action = "on" })'"'"' && brightnessctl -r)' "${hypridle_conf}"
+grep -Fxq '  on-timeout=hyprctl dispatch '"'"'hl.dsp.dpms({ action = "off" })'"'"'' "${hypridle_conf}"
+refute 'hypridle must dispatch Lua, not a legacy bareword' \
+  -E '^[^#]*hyprctl dispatch +[a-z]' "${hypridle_conf}"
 grep -Fq 'hl.bind("switch:on:Lid Switch", exec("keystone-lock --fail-closed && systemctl suspend")' "${hyprland_lua}"
 grep -Fq 'hl.bind("switch:off:Lid Switch", function()' "${hyprland_lua}"
 grep -Fq 'hl.timer(function()' "${hyprland_lua}"
 grep -Fq 'hl.dispatch(hl.dsp.dpms({ action = "on" }))' "${hyprland_lua}"
-! grep -Eq 'hl\.bind\([^\n]*hl\.dsp\.dpms' "${hyprland_lua}"
-! grep -Fq 'pidof hyprlock' "${hypridle_conf}" "${hyprland_lua}"
+refute 'lid-open DPMS must dispatch from a timer, not straight from the bind' \
+  -E 'hl\.bind\([^\n]*hl\.dsp\.dpms' "${hyprland_lua}"
+# Input is the recovery path that does not depend on any hypridle hook firing.
+grep -Fq 'key_press_enables_dpms = true' "${hyprland_lua}"
+grep -Fq 'mouse_move_enables_dpms = true' "${hyprland_lua}"
+refute 'lock state must come from the compositor, not pidof' \
+  -F 'pidof hyprlock' "${hypridle_conf}" "${hyprland_lua}"
 printf 'ok: lock hooks\n'
 
 grep -Fq 'local theme, load_error = loadfile(theme_path)' "${hyprland_lua}"
