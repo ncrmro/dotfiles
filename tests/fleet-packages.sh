@@ -92,8 +92,8 @@ refute() {
   fi
 }
 
-# hyprctl takes Lua since Hyprland 0.56, so a bareword `dispatch dpms on` is a
-# syntax error every caller here swallows. Pin the hl.dsp.* form.
+# Since Hyprland 0.56, a bareword dispatch is invalid Lua. Pin the hl.dsp.*
+# wake and blank hooks verbatim.
 grep -Fxq '  after_sleep_cmd=keystone-dpms-wake || (hyprctl dispatch '"'"'hl.dsp.dpms({ action = "on" })'"'"' && brightnessctl -r)' "${hypridle_conf}"
 grep -Fxq '  on-resume=keystone-dpms-wake || (hyprctl dispatch '"'"'hl.dsp.dpms({ action = "on" })'"'"' && brightnessctl -r)' "${hypridle_conf}"
 grep -Fxq '  on-timeout=hyprctl dispatch '"'"'hl.dsp.dpms({ action = "off" })'"'"'' "${hypridle_conf}"
