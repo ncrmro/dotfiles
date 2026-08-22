@@ -1,0 +1,311 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+state_root="${AGENT_SESSIONS_DIR:-${XDG_RUNTIME_DIR:-${XDG_STATE_HOME:-${HOME}/.local/state}}/agent-sessions}"
+stale_after="${AGENT_SESSIONS_STALE_AFTER:-300}"
+
+usage() {
+  cat <<'EOF'
+Usage:
+  agent-sessions list [--json|--tsv]
+  agent-sessions show SESSION_ID
+  agent-sessions set SESSION_ID STATE [OPTIONS]
+  agent-sessions focus SESSION_ID
+  agent-sessions remove SESSION_ID
+  agent-sessions fzf
+
+States: working, idle, waiting, blocked, done
+
+Set options:
+  --agent NAME       Agent or harness name.
+  --project NAME     Project name. Defaults to the current directory name.
+  --step TEXT        Current task or step.
+  --pid PID          Owning process. Defaults to the parent process.
+  --mux-session NAME Zellij session. Defaults to ZELLIJ_SESSION_NAME.
+  --tab NAME         Zellij tab name.
+  --pane ID          Zellij pane ID. Defaults to ZELLIJ_PANE_ID.
+
+Environment:
+  AGENT_SESSIONS_DIR          Override the lease directory.
+  AGENT_SESSIONS_STALE_AFTER  Stale lease age in seconds. Default: 300.
+EOF
+}
+
+fail() {
+  printf 'agent-sessions: %s\n' "$*" >&2
+  exit 1
+}
+
+require_command() {
+  command -v "$1" >/dev/null 2>&1 || fail "$1 is required"
+}
+
+validate_id() {
+  [[ "$1" =~ ^[A-Za-z0-9._:-]+$ ]] || fail "invalid session ID: $1"
+}
+
+session_file() {
+  validate_id "$1"
+  printf '%s/%s.json\n' "$state_root" "$1"
+}
+
+json_stream() {
+  local file now pid pid_alive
+  now="$(date +%s)"
+  shopt -s nullglob
+  for file in "$state_root"/*.json; do
+    if ! jq -e 'type == "object" and (.session_id | type == "string")' "$file" >/dev/null 2>&1; then
+      continue
+    fi
+    pid="$(jq -r '.pid // empty' "$file")"
+    pid_alive=true
+    if [[ "$pid" =~ ^[0-9]+$ ]] && ! kill -0 "$pid" 2>/dev/null; then
+      pid_alive=false
+    fi
+    jq -c \
+      --argjson now "$now" \
+      --argjson ttl "$stale_after" \
+      --argjson pid_alive "$pid_alive" '
+        . as $lease
+        | (($now - (.updated_epoch // 0)) | if . < 0 then 0 else . end) as $age
+        | . + {
+            age_seconds: $age,
+            effective_state: (
+              if .state == "done" then "done"
+              elif ($pid_alive | not) or $age > $ttl then "stale"
+              else .state
+              end
+            )
+          }
+      ' "$file"
+  done
+}
+
+list_json() {
+  if [[ ! -d "$state_root" ]]; then
+    printf '[]\n'
+    return
+  fi
+  json_stream | jq -s 'sort_by(
+    ({working: 0, waiting: 1, blocked: 2, idle: 3, stale: 4, done: 5}[.effective_state] // 6),
+    .agent,
+    .project
+  )'
+}
+
+list_tsv() {
+  list_json | jq -r '
+    def symbol:
+      {working:"●", idle:"○", waiting:"◆", blocked:"!", done:"✓", stale:"?"}[.]
+      // "?";
+    def age:
+      if . < 60 then "\(.)s"
+      elif . < 3600 then "\((. / 60) | floor)m"
+      else "\((. / 3600) | floor)h"
+      end;
+    .[] | [
+      .session_id,
+      ((.effective_state | symbol) + " " + .effective_state),
+      (.agent // "agent"),
+      (.project // "-"),
+      (.step // "-"),
+      (.age_seconds | age),
+      ([.mux.session, .mux.tab_name, .mux.pane_id] | map(select(. != null and . != "")) | join(":"))
+    ] | @tsv
+  '
+}
+
+cmd_list() {
+  case "${1:-}" in
+    --json)
+      list_json
+      ;;
+    --tsv)
+      list_tsv
+      ;;
+    "")
+      {
+        printf 'ID\tSTATE\tAGENT\tPROJECT\tSTEP\tAGE\tLOCATION\n'
+        list_tsv
+      } | column -t -s $'\t'
+      ;;
+    *)
+      fail "unknown list option: $1"
+      ;;
+  esac
+}
+
+cmd_show() {
+  local file
+  [[ $# -eq 1 ]] || fail 'show requires SESSION_ID'
+  file="$(session_file "$1")"
+  [[ -f "$file" ]] || fail "unknown session: $1"
+  jq . "$file"
+}
+
+cmd_set() {
+  [[ $# -ge 2 ]] || fail 'set requires SESSION_ID and STATE'
+  local id="$1" state="$2"
+  shift 2
+  validate_id "$id"
+  [[ "$state" =~ ^(working|idle|waiting|blocked|done)$ ]] || fail "invalid state: $state"
+
+  local target
+  target="$(session_file "$id")"
+  local agent="agent" project="${PWD##*/}" step="" tab_name=""
+  if [[ -f "$target" ]]; then
+    agent="$(jq -r '.agent // "agent"' "$target")"
+    project="$(jq -r '.project // empty' "$target")"
+    step="$(jq -r '.step // empty' "$target")"
+    tab_name="$(jq -r '.mux.tab_name // empty' "$target")"
+  fi
+  local pid="$PPID"
+  local mux_session="${ZELLIJ_SESSION_NAME:-}"
+  local pane_id="${ZELLIJ_PANE_ID:-}"
+  if [[ -f "$target" ]]; then
+    [[ -n "$mux_session" ]] || mux_session="$(jq -r '.mux.session // empty' "$target")"
+    [[ -n "$pane_id" ]] || pane_id="$(jq -r '.mux.pane_id // empty' "$target")"
+  fi
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --agent|--project|--step|--pid|--mux-session|--tab|--pane)
+        [[ $# -ge 2 ]] || fail "$1 requires a value"
+        case "$1" in
+          --agent) agent="$2" ;;
+          --project) project="$2" ;;
+          --step) step="$2" ;;
+          --pid) pid="$2" ;;
+          --mux-session) mux_session="$2" ;;
+          --tab) tab_name="$2" ;;
+          --pane) pane_id="$2" ;;
+        esac
+        shift 2
+        ;;
+      *)
+        fail "unknown set option: $1"
+        ;;
+    esac
+  done
+
+  [[ "$pid" =~ ^[0-9]+$ ]] || fail "invalid PID: $pid"
+  mkdir -p "$state_root"
+  chmod 700 "$state_root"
+
+  local now tmp
+  now="$(date +%s)"
+  tmp="$(mktemp "$state_root/.${id}.XXXXXX")"
+  jq -n \
+    --arg session_id "$id" \
+    --arg agent "$agent" \
+    --arg project "$project" \
+    --arg state "$state" \
+    --arg step "$step" \
+    --argjson pid "$pid" \
+    --arg mux_session "$mux_session" \
+    --arg tab_name "$tab_name" \
+    --arg pane_id "$pane_id" \
+    --argjson updated_epoch "$now" '
+      {
+        version: 1,
+        session_id: $session_id,
+        agent: $agent,
+        project: $project,
+        state: $state,
+        step: $step,
+        pid: $pid,
+        updated_epoch: $updated_epoch,
+        mux: {
+          kind: (if $mux_session == "" then null else "zellij" end),
+          session: (if $mux_session == "" then null else $mux_session end),
+          tab_name: (if $tab_name == "" then null else $tab_name end),
+          pane_id: (if $pane_id == "" then null else $pane_id end)
+        }
+      }
+    ' >"$tmp"
+  chmod 600 "$tmp"
+  mv "$tmp" "$target"
+}
+
+cmd_remove() {
+  local file
+  [[ $# -eq 1 ]] || fail 'remove requires SESSION_ID'
+  file="$(session_file "$1")"
+  [[ -f "$file" ]] || return 0
+  rm "$file"
+}
+
+cmd_focus() {
+  local file mux_session tab_name pane_id
+  [[ $# -eq 1 ]] || fail 'focus requires SESSION_ID'
+  file="$(session_file "$1")"
+  [[ -f "$file" ]] || fail "unknown session: $1"
+  mux_session="$(jq -r '.mux.session // empty' "$file")"
+  tab_name="$(jq -r '.mux.tab_name // empty' "$file")"
+  pane_id="$(jq -r '.mux.pane_id // empty' "$file")"
+  [[ -n "$mux_session" ]] || fail "session $1 has no Zellij location"
+  require_command zellij
+  [[ -n "${ZELLIJ:-}" && -n "${ZELLIJ_SESSION_NAME:-}" ]] \
+    || fail 'focus must run inside Zellij'
+  [[ "$mux_session" == "$ZELLIJ_SESSION_NAME" ]] \
+    || fail "session $1 is in Zellij session $mux_session; current session is $ZELLIJ_SESSION_NAME"
+
+  if [[ -n "$pane_id" ]]; then
+    zellij action focus-pane-id "$pane_id"
+  elif [[ -n "$tab_name" ]]; then
+    zellij action go-to-tab-name "$tab_name"
+  else
+    fail "session $1 has no Zellij pane or tab"
+  fi
+}
+
+cmd_fzf() {
+  require_command fzf
+  local self self_command selection
+  self="$(realpath "$0")"
+  printf -v self_command '%q' "$self"
+  local -a display_args=(
+    --ansi
+    --border=rounded
+    --border-label=' agent sessions '
+    --cycle
+    --delimiter=$'\t'
+    --header='Enter: focus · Ctrl-R: reload · Esc: close'
+    --id-nth=1
+    --preview="$self_command show {1}"
+    --preview-label=details
+    --preview-window=right:55%:wrap
+    --prompt='agents › '
+    --reverse
+    --track
+    --with-nth=2..
+    --bind="ctrl-r:reload($self_command list --tsv)+refresh-preview"
+  )
+  if [[ -n "${ZELLIJ:-}" ]]; then
+    display_args+=(--popup=center,90%,75%)
+  fi
+
+  selection="$(list_tsv | fzf "${display_args[@]}" --accept-nth=1)" || return 0
+  [[ -n "$selection" ]] && cmd_focus "$selection"
+}
+
+require_command jq
+[[ "$stale_after" =~ ^[0-9]+$ ]] || fail 'AGENT_SESSIONS_STALE_AFTER must be an integer'
+
+command_name="${1:-}"
+[[ -n "$command_name" ]] || {
+  usage
+  exit 2
+}
+shift
+
+case "$command_name" in
+  list) cmd_list "$@" ;;
+  show) cmd_show "$@" ;;
+  set) cmd_set "$@" ;;
+  focus) cmd_focus "$@" ;;
+  remove) cmd_remove "$@" ;;
+  fzf) cmd_fzf "$@" ;;
+  help|-h|--help) usage ;;
+  *) fail "unknown command: $command_name" ;;
+esac
