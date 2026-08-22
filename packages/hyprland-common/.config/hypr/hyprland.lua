@@ -193,7 +193,7 @@ hl.bind("XF86AudioPause", exec("playerctl play-pause"), { locked = true })
 hl.bind("XF86AudioPlay", exec("playerctl play-pause"), { locked = true })
 hl.bind("XF86AudioPrev", exec("playerctl previous"), { locked = true })
 hl.bind("XF86PowerOff", exec(app .. "keystone-menu system"), { locked = true })
-hl.bind("switch:on:Lid Switch", exec("keystone-lock --fail-closed && systemctl suspend"), { locked = true })
+hl.bind("switch:on:Lid Switch", exec("keystone-suspend --lid"), { locked = true })
 hl.bind("switch:off:Lid Switch", function()
   -- Delay DPMS for 500 ms so Hyprland 0.56 can finish the lid switch callback.
   hl.timer(function()
