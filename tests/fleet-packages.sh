@@ -74,6 +74,7 @@ hypridle_conf="${repo_dir}/packages/hyprland-common/.config/hypr/hypridle.conf"
 hyprland_lua="${repo_dir}/packages/hyprland-common/.config/hypr/hyprland.lua"
 uwsm_env="${repo_dir}/packages/hyprland-common/.config/uwsm/env"
 uwsm_hyprland_env="${repo_dir}/packages/hyprland-common/.config/uwsm/env-hyprland"
+zsh_env="${repo_dir}/packages/zsh/.zshenv"
 
 grep -Fxq '  before_sleep_cmd=keystone-lock --fail-closed' "${hypridle_conf}"
 grep -Fxq '  inhibit_sleep=3' "${hypridle_conf}"
@@ -140,9 +141,55 @@ done
 ! grep -Eq 'WLR_RENDERER_ALLOW_SOFTWARE|HYPRCURSOR_' "${uwsm_env}"
 ! grep -Eq '^[[:space:]]*export[[:space:]]+GTK_THEME=' "${uwsm_env}"
 grep -Fxq 'export XDG_DATA_DIRS="${XDG_DATA_DIRS:-$HOME/.local/share:/usr/local/share:/usr/share}:$HOME/.nix-profile/share:/nix/var/nix/profiles/default/share"' "${uwsm_env}"
+grep -Fxq 'export SSH_AUTH_SOCK="${XDG_RUNTIME_DIR}/gcr/ssh"' "${uwsm_env}"
 grep -Fxq 'export HYPRCURSOR_SIZE=24' "${uwsm_hyprland_env}"
 grep -Fxq 'export HYPRCURSOR_THEME=Adwaita' "${uwsm_hyprland_env}"
 ! grep -Fq 'WLR_RENDERER_ALLOW_SOFTWARE' "${uwsm_hyprland_env}"
+
+zsh -n "${zsh_env}"
+socket_test_root="$(mktemp -d)"
+socket_agent_pid=""
+cleanup_socket_test() {
+  if [[ -n "${socket_agent_pid}" ]]; then
+    kill "${socket_agent_pid}" 2>/dev/null || true
+    wait "${socket_agent_pid}" 2>/dev/null || true
+  fi
+  rm -rf "${socket_test_root}"
+}
+trap cleanup_socket_test EXIT
+mkdir -p "${socket_test_root}/gcr"
+
+SSH_AUTH_SOCK="${socket_test_root}/inherited" \
+  XDG_RUNTIME_DIR="${socket_test_root}" \
+  zsh -f -c 'source "$1"; [[ "$SSH_AUTH_SOCK" == "$2/inherited" ]]' \
+  _ "${zsh_env}" "${socket_test_root}"
+
+env -u SSH_AUTH_SOCK XDG_RUNTIME_DIR="${socket_test_root}" \
+  zsh -f -c 'source "$1"; [[ "$SSH_AUTH_SOCK" == "$2/ssh-agent" ]]' \
+  _ "${zsh_env}" "${socket_test_root}"
+
+ssh-agent -D -a "${socket_test_root}/gcr/ssh" >/dev/null 2>&1 &
+socket_agent_pid="$!"
+for _ in {1..50}; do
+  [[ -S "${socket_test_root}/gcr/ssh" ]] && break
+  if ! kill -0 "${socket_agent_pid}" 2>/dev/null; then
+    printf 'The temporary SSH agent stopped before it created its socket.\n' >&2
+    exit 1
+  fi
+  sleep 0.1
+done
+if [[ ! -S "${socket_test_root}/gcr/ssh" ]]; then
+  printf 'The temporary SSH agent did not create its socket.\n' >&2
+  exit 1
+fi
+
+env -u SSH_AUTH_SOCK XDG_RUNTIME_DIR="${socket_test_root}" \
+  zsh -f -c 'source "$1"; [[ "$SSH_AUTH_SOCK" == "$2/gcr/ssh" ]]' \
+  _ "${zsh_env}" "${socket_test_root}"
+
+cleanup_socket_test
+trap - EXIT
+printf 'ok: SSH agent socket selection\n'
 
 test "$(find "${repo_dir}/packages/themes/.config/themes" -name hyprland.lua -type f | wc -l)" -eq 12
 ! find "${repo_dir}/packages/themes/.config/themes" -name hyprland.conf -type f | grep -q .

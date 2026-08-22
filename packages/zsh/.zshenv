@@ -7,8 +7,12 @@ if [[ -z "$__HM_ZSH_SESS_VARS_SOURCED" ]]; then
   
 fi
 
-if [ -z "$SSH_AUTH_SOCK" ]; then
-  export SSH_AUTH_SOCK=$XDG_RUNTIME_DIR/ssh-agent
+if [[ -z "${SSH_AUTH_SOCK:-}" ]]; then
+  if [[ -S "${XDG_RUNTIME_DIR}/gcr/ssh" ]]; then
+    export SSH_AUTH_SOCK="${XDG_RUNTIME_DIR}/gcr/ssh"
+  else
+    export SSH_AUTH_SOCK="${XDG_RUNTIME_DIR}/ssh-agent"
+  fi
 fi
 
 ZSH="/etc/profiles/per-user/${USER:-$(id -un)}/share/oh-my-zsh";
