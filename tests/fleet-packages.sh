@@ -99,7 +99,7 @@ grep -Fxq '  on-resume=keystone-dpms-wake || (hyprctl dispatch '"'"'hl.dsp.dpms(
 grep -Fxq '  on-timeout=hyprctl dispatch '"'"'hl.dsp.dpms({ action = "off" })'"'"'' "${hypridle_conf}"
 refute 'hypridle must dispatch Lua, not a legacy bareword' \
   -E '^[^#]*hyprctl dispatch +[a-z]' "${hypridle_conf}"
-grep -Fq 'hl.bind("switch:on:Lid Switch", exec("keystone-lock --fail-closed && systemctl suspend")' "${hyprland_lua}"
+grep -Fq 'hl.bind("switch:on:Lid Switch", exec("keystone-suspend --lid")' "${hyprland_lua}"
 grep -Fq 'hl.bind("switch:off:Lid Switch", function()' "${hyprland_lua}"
 grep -Fq 'hl.timer(function()' "${hyprland_lua}"
 grep -Fq 'hl.dispatch(hl.dsp.dpms({ action = "on" }))' "${hyprland_lua}"
