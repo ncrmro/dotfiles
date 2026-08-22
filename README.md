@@ -97,6 +97,27 @@ Current scripts:
   session-bearing paths in that dir to `~/.claude`. `--resume` and `--continue`
   then list the same sessions under both `claude` and `claude-work`.
 
+## Agent session palette spike
+
+The `zellij` package includes an `agent-sessions` command for a low-fidelity
+agent status palette. It stores short-lived JSON leases under
+`$XDG_RUNTIME_DIR/agent-sessions/`. Run these commands inside two Zellij panes
+to test the list and focus behavior:
+
+```shell
+agent-sessions set demo-one working --agent codex --step "test the palette"
+agent-sessions set demo-two waiting --agent pi --tab another-tab --step "wait for input"
+agent-sessions list
+agent-sessions fzf
+```
+
+The command reads `ZELLIJ_SESSION_NAME` and `ZELLIJ_PANE_ID` when it writes a
+lease. Press Enter in FZF to focus a selected pane in the current Zellij
+session. Press Ctrl-R to reload the list. Cross-session desktop focus is not
+part of this spike. A lease becomes `stale` after five minutes by default.
+Set `AGENT_SESSIONS_STALE_AFTER` to change that interval. A later
+`agent-sessions set demo-one idle` call preserves the existing metadata.
+
 # Stow
 
 GNU Stow is a symlink manager that simplifies the management of dotfiles by creating symbolic links from a central directory (this repository) to their target locations in your home directory. This keeps your configurations organized and portable.
