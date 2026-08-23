@@ -44,7 +44,7 @@ verify_config() {
 }
 
 mapfile -t theme_dirs < <(
-  find "${repo_dir}/packages/themes/.config/themes" \
+  find "${repo_dir}/packages/themes/.config/keystone/theme-catalogs/user" \
     -mindepth 2 -maxdepth 2 -name hyprland.lua -type f -printf '%h\n' | sort
 )
 host_packages=(
@@ -53,8 +53,8 @@ host_packages=(
   hyprland-workstation
 )
 
-[[ "${#theme_dirs[@]}" -eq 12 ]] || {
-  printf 'Expected 12 Hyprland themes. Found %d.\n' "${#theme_dirs[@]}" >&2
+[[ "${#theme_dirs[@]}" -eq 2 ]] || {
+  printf 'Expected 2 user Hyprland overrides. Found %d.\n' "${#theme_dirs[@]}" >&2
   exit 1
 }
 

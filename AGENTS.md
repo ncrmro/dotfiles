@@ -13,12 +13,10 @@ The starter terminal templates and the terminal files in `packages/` MUST stay
 in sync. Changes SHOULD start here for rapid iteration. A change MUST also
 update the starter template when it changes the default for a new user.
 
-Every theme MUST provide these terminal adapters:
-
-- `zellij.kdl`
-- `helix.toml`
-- `btop.theme`
-- `lazygit.yml`
+The `themes` Stow package MUST install a sparse, highest-precedence catalog at
+`~/.config/keystone/theme-catalogs/user`. It MUST contain only intentional
+user overrides and complete user-only themes. It MUST NOT install into
+`~/.config/themes`, which Keystone reserves for the generated `current` link.
 
 A headless host MUST support theme selection without the desktop product.
 Desktop theme extensions MUST NOT replace the terminal selector or redeclare

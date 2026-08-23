@@ -19,7 +19,7 @@ packages/
   ssh/              .ssh/config
   hyprland-common/  .config/hypr/hyprland.lua
                     .config/uwsm/{env,env-hyprland}
-  themes/           .config/themes/
+  themes/           .config/keystone/theme-catalogs/user/
 ```
 
 Home Manager restows the selected packages during activation. To do the same
@@ -33,10 +33,10 @@ manually:
 
 Configuration in `packages/` should refer to dependencies by executable name,
 not by `/nix/store` path, so Nix can continue to own dependency provisioning.
-The `themes` package owns the editable terminal and desktop theme adapters.
-Each theme MUST provide `zellij.kdl`, `helix.toml`, `btop.theme`, and
-`lazygit.yml`. A desktop theme MUST also provide the graphical adapters that
-`ks.systems/desktop` declares. Keystone MAY switch the active theme and reload
+The `themes` package is the sparse, highest-precedence user catalog. It owns
+only intentional overrides and complete user-only themes. Omarchy,
+`ks.systems/terminal`, and `ks.systems/desktop` provide the lower layers.
+Keystone MAY compose those layers, switch the active theme, and reload
 applications. Keystone MUST NOT generate or replace these editable files.
 
 `ks.systems/terminal` ships the same terminal files as starter templates. Its
@@ -44,10 +44,8 @@ seed command copies missing defaults into a new user's dotfiles tree. The seed
 command MUST NOT overwrite an existing file unless the user passes `--force`.
 After seeding, this repository is the source of truth for local edits.
 
-Each theme provides `zellij.kdl` and defines its palette as `current`.
-The palettes match the Zellij v0.44.3 built-in themes selected before this
-migration. Zellij v0.44.3 has no Rosé Pine theme, so the `rose-pine` directory
-provides the Rosé Pine Dawn palette that the local desktop theme uses.
+The complete user-only `royal-green` theme provides `zellij.kdl` and defines
+its palette as `current`. Shared palettes live in `ks.systems/terminal`.
 
 ## Hyprland and UWSM
 
