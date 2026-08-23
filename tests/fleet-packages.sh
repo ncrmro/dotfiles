@@ -2,10 +2,8 @@
 set -euo pipefail
 
 repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-desktop=(
-  bat btop clipse ghostty helix satty themes walker waybar wofi zellij
-  hyprland-common
-)
+terminal=(bin bat btop git helix lazygit ssh themes zellij zsh)
+desktop=(clipse ghostty hyprland-common satty walker waybar wofi)
 
 compositions=(
   # Mirrors dotfiles.packages per host in ks-config. Mercury is infrastructure,
@@ -13,10 +11,10 @@ compositions=(
   # import the dotfiles module at all. Neither gets `bin`.
   "maia:git ssh zsh"
   "mercury:git ssh zsh"
-  "ocean:bin git ssh zsh"
-  "ncrmro-workstation:bin git ssh zsh ${desktop[*]} hyprland-workstation"
-  "ncrmro-laptop:bin git ssh zsh ${desktop[*]} hyprland-laptop"
-  "ks-test-delltop:bin git ssh zsh ${desktop[*]} hyprland-delltop"
+  "ocean:${terminal[*]}"
+  "ncrmro-workstation:${terminal[*]} ${desktop[*]} hyprland-workstation"
+  "ncrmro-laptop:${terminal[*]} ${desktop[*]} hyprland-laptop"
+  "ks-test-delltop:${terminal[*]} ${desktop[*]} hyprland-delltop"
 )
 
 seed_obsolete_stow_link() {
