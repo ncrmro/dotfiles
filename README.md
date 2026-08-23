@@ -4,9 +4,13 @@ Largely inspired by Paul's [dotfiles](https://github.com/paul/dotfiles).
 
 This repository contains configuration files (dotfiles) for various tools and applications. By using [GNU Stow](https://www.gnu.org/software/stow/), these configurations can easily be managed and deployed across different systems.
 
-On NixOS, `ncrmro/ks-config` provisions each tool and its dependencies while
-this repository owns the editable configuration. The NixOS layout lives under
-`packages/`, with one Stow package per tool:
+Keystone separates runtime provisioning from editable defaults. The
+`ks.systems/terminal` product provisions terminal tools and generated runtime
+wiring. The `ks.systems/desktop` product extends it with graphical tools.
+`ncrmro/ks-config` selects those products for each host. This repository owns
+the editable configuration for both products.
+
+The layout lives under `packages/`, with one Stow package per tool:
 
 ```text
 packages/
@@ -15,7 +19,7 @@ packages/
   ssh/              .ssh/config
   hyprland-common/  .config/hypr/hyprland.lua
                     .config/uwsm/{env,env-hyprland}
-  themes/           .config/themes/
+  themes/           .config/keystone/theme-catalogs/user/
 ```
 
 Home Manager restows the selected packages during activation. To do the same
@@ -29,9 +33,19 @@ manually:
 
 Configuration in `packages/` should refer to dependencies by executable name,
 not by `/nix/store` path, so Nix can continue to own dependency provisioning.
-The `themes` package owns the editable desktop palettes and backgrounds.
-Keystone may switch the active theme and reload applications, but it does not
-generate or replace these files.
+The `themes` package is the sparse, highest-precedence user catalog. It owns
+only intentional overrides and complete user-only themes. Omarchy,
+`ks.systems/terminal`, and `ks.systems/desktop` provide the lower layers.
+Keystone MAY compose those layers, switch the active theme, and reload
+applications. Keystone MUST NOT generate or replace these editable files.
+
+`ks.systems/terminal` ships the same terminal files as starter templates. Its
+seed command copies missing defaults into a new user's dotfiles tree. The seed
+command MUST NOT overwrite an existing file unless the user passes `--force`.
+After seeding, this repository is the source of truth for local edits.
+
+The complete user-only `royal-green` theme provides `zellij.kdl` and defines
+its palette as `current`. Shared palettes live in `ks.systems/terminal`.
 
 ## Hyprland and UWSM
 

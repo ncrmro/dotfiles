@@ -70,6 +70,20 @@ for composition in "${compositions[@]}"; do
   printf 'ok: %s\n' "${host}"
 done
 
+themes_dir="${repo_dir}/packages/themes/.config/keystone/theme-catalogs/user"
+mapfile -t theme_dirs < <(find "${themes_dir}" -mindepth 1 -maxdepth 1 -type d | sort)
+test "${#theme_dirs[@]}" -eq 15
+! find "${themes_dir}" -name zellij.conf -type f | grep -q .
+! test -e "${repo_dir}/packages/zellij/.config/zellij/themes/royal-green.kdl"
+
+test "$(find "${themes_dir}" -name helix.conf -type f | wc -l)" -eq 15
+test "$(find "${themes_dir}" -name hyprland.lua -type f | wc -l)" -eq 2
+test "$(find "${themes_dir}" -name zellij.kdl -type f | wc -l)" -eq 1
+theme_file="${themes_dir}/royal-green/zellij.kdl"
+grep -Eq '^[[:space:]]*current[[:space:]]*\{' "${theme_file}"
+
+printf 'ok: Zellij theme contract\n'
+
 hypridle_conf="${repo_dir}/packages/hyprland-common/.config/hypr/hypridle.conf"
 hyprland_lua="${repo_dir}/packages/hyprland-common/.config/hypr/hyprland.lua"
 uwsm_env="${repo_dir}/packages/hyprland-common/.config/uwsm/env"
@@ -191,8 +205,8 @@ cleanup_socket_test
 trap - EXIT
 printf 'ok: SSH agent socket selection\n'
 
-test "$(find "${repo_dir}/packages/themes/.config/themes" -name hyprland.lua -type f | wc -l)" -eq 12
-! find "${repo_dir}/packages/themes/.config/themes" -name hyprland.conf -type f | grep -q .
+test "$(find "${repo_dir}/packages/themes/.config/keystone/theme-catalogs/user" -name hyprland.lua -type f | wc -l)" -eq 2
+! find "${repo_dir}/packages/themes/.config/keystone/theme-catalogs/user" -name hyprland.conf -type f | grep -q .
 ! find "${repo_dir}/packages" \( -path '*/hyprland.conf' -o -path '*/ncrmro.conf' -o -path '*/host.conf' \) -type f | grep -q .
 
 for ecosystem_config in hypridle.conf hyprlock.conf hyprpaper.conf hyprsunset.conf xdph.conf; do
