@@ -124,7 +124,11 @@ if [[ $TERM != "dumb" ]]; then
   eval "$(starship init zsh)"
 fi
 
-source "/etc/profiles/per-user/$USER/etc/profile.d/command-not-found.sh"
+command_not_found="/etc/profiles/per-user/$USER/etc/profile.d/command-not-found.sh"
+if [[ -r "$command_not_found" ]]; then
+  source "$command_not_found"
+fi
+unset command_not_found
 
 lg() {
     export LAZYGIT_NEW_DIR_FILE=~/.lazygit/newdir
