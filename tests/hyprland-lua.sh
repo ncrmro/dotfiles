@@ -33,6 +33,9 @@ grep -Fq 'Hyprland 0.56.0 ' <<<"${version_output}" \
   exit 1
 }
 
+grep -Fqx 'hl.bind(mod .. " + Space", exec(app .. "walker"))' \
+  "${repo_dir}/packages/hyprland-common/.config/hypr/hyprland.lua"
+
 verify_config() {
   local test_home="$1"
   local runtime_dir="$2"

@@ -60,7 +60,7 @@ local function exec(command)
 end
 
 hl.bind(mod .. " + Return", exec(app .. "ghostty"))
-hl.bind(mod .. " + Space", exec(app .. "wofi --show drun"))
+hl.bind(mod .. " + Space", exec(app .. "walker"))
 hl.bind(mod .. " + B", exec(app .. "chromium --new-window --ozone-platform=wayland"))
 hl.bind(mod .. " + E", exec(app .. "nautilus --new-window"))
 hl.bind(mod .. " + Escape", exec(app .. "keystone-menu system"))
