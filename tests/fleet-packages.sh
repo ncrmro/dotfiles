@@ -3,7 +3,7 @@ set -euo pipefail
 
 repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 terminal=(bin bat btop git helix lazygit ssh themes zellij zsh)
-desktop=(clipse ghostty hyprland-common satty walker waybar wofi)
+desktop=(clipse ghostty hyprland-common omarchy satty walker wofi)
 
 compositions=(
   # Mirrors dotfiles.packages per host in ks-config. Mercury is infrastructure,
@@ -39,6 +39,20 @@ for composition in "${compositions[@]}"; do
     seed_obsolete_stow_link \
       "${repo_dir}/packages/hyprland-common/.config/hypr/ncrmro.conf" \
       "${test_home}/.config/hypr/ncrmro.conf"
+  fi
+
+  if [[ " ${packages[*]} " == *" omarchy "* ]]; then
+    shell_config="${test_home}/.config/omarchy/shell.json"
+    test -L "${shell_config}"
+    shell_target="$(readlink "${shell_config}")"
+    shell_original="$(cat "${shell_config}")"
+    printf '\n' >>"${shell_config}"
+    test -L "${shell_config}"
+    test "$(readlink "${shell_config}")" = "${shell_target}"
+    printf '%s\n' "${shell_original}" >"${shell_config}"
+    HOME="${test_home}" "${repo_dir}/install.sh" omarchy
+    test -L "${shell_config}"
+    test "$(readlink "${shell_config}")" = "${shell_target}"
   fi
 
   for package in "${packages[@]}"; do
