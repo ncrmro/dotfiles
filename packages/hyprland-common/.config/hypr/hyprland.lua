@@ -268,4 +268,5 @@ local function load_module(name)
 end
 
 load_module("user")
+load_module("monitors")
 load_module("host")
