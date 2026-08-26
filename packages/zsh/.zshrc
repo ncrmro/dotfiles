@@ -3,9 +3,9 @@ for profile in ${(z)NIX_PROFILES}; do
   fpath+=($profile/share/zsh/site-functions $profile/share/zsh/$ZSH_VERSION/functions $profile/share/zsh/vendor-completions)
 done
 
-HELPDIR="/run/current-system/sw/share/zsh/$ZSH_VERSION/help"
+HELPDIR="$KEYSTONE_PROFILE_ROOT/share/zsh/$ZSH_VERSION/help"
 
-source "/etc/profiles/per-user/$USER/share/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh"
+source "$KEYSTONE_PROFILE_ROOT/share/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh"
 ZSH_AUTOSUGGEST_STRATEGY=(history)
 
 
@@ -24,7 +24,7 @@ eval "$(zoxide init zsh )"
 HISTSIZE="100000"
 SAVEHIST="100000"
 
-HISTFILE="/home/ncrmro/.zsh_history"
+HISTFILE="$HOME/.zsh_history"
 mkdir -p "$(dirname "$HISTFILE")"
 
 setopt HIST_FCNTL_LOCK
@@ -73,7 +73,7 @@ _keystone_zellij_pipe_tab_name() {
     '{ pane_id: $pane_id, name: $name }')"
 
   zellij action pipe \
-    --plugin "file:/etc/profiles/per-user/$USER/share/zellij/plugins/zellij-tab-name.wasm" \
+    --plugin "file:$KEYSTONE_PROFILE_ROOT/share/zellij/plugins/zellij-tab-name.wasm" \
     --name change-tab-name \
     -- "$payload" >/dev/null 2>&1
 }
@@ -124,7 +124,7 @@ if [[ $TERM != "dumb" ]]; then
   eval "$(starship init zsh)"
 fi
 
-command_not_found="/etc/profiles/per-user/$USER/etc/profile.d/command-not-found.sh"
+command_not_found="$KEYSTONE_PROFILE_ROOT/etc/profile.d/command-not-found.sh"
 if [[ -r "$command_not_found" ]]; then
   source "$command_not_found"
 fi
@@ -145,8 +145,13 @@ fi
 
 eval "$(direnv hook zsh)"
 
-# NixOS rebuild helper with --boot support for boot-critical changes.
 update() {
+  if [[ "$(uname -s)" == "Darwin" ]]; then
+    home-manager switch --flake "$HOME/repos/ncrmro/ks-config#nicholas@unsup-macbook" "$@"
+    return
+  fi
+
+  # NixOS rebuild helper with --boot support for boot-critical changes.
   local host
   local cmd="switch"
   host="$(hostname)"
@@ -177,5 +182,5 @@ for keystone_fragment in "$HOME/.config/keystone/shell.d"/*.zsh(N); do
   source "$keystone_fragment"
 done
 unset keystone_fragment
-source "/etc/profiles/per-user/$USER/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"
+source "$KEYSTONE_PROFILE_ROOT/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"
 ZSH_HIGHLIGHT_HIGHLIGHTERS+=()
