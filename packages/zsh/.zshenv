@@ -1,5 +1,14 @@
-# Environment variables
-. "/etc/profiles/per-user/${USER:-$(id -un)}/etc/profile.d/hm-session-vars.sh"
+KEYSTONE_PROFILE_ROOT="/etc/profiles/per-user/${USER:-$(id -un)}"
+if [[ ! -d "$KEYSTONE_PROFILE_ROOT" ]]; then
+  KEYSTONE_PROFILE_ROOT="$HOME/.nix-profile"
+fi
+export KEYSTONE_PROFILE_ROOT
+
+hm_session_vars="$KEYSTONE_PROFILE_ROOT/etc/profile.d/hm-session-vars.sh"
+if [[ -r "$hm_session_vars" ]]; then
+  . "$hm_session_vars"
+fi
+unset hm_session_vars
 
 # Only source this once
 if [[ -z "$__HM_ZSH_SESS_VARS_SOURCED" ]]; then
@@ -7,7 +16,7 @@ if [[ -z "$__HM_ZSH_SESS_VARS_SOURCED" ]]; then
   
 fi
 
-if [[ -z "${SSH_AUTH_SOCK:-}" ]]; then
+if [[ -z "${SSH_AUTH_SOCK:-}" && -n "${XDG_RUNTIME_DIR:-}" ]]; then
   if [[ -S "${XDG_RUNTIME_DIR}/gcr/ssh" ]]; then
     export SSH_AUTH_SOCK="${XDG_RUNTIME_DIR}/gcr/ssh"
   else
@@ -15,5 +24,5 @@ if [[ -z "${SSH_AUTH_SOCK:-}" ]]; then
   fi
 fi
 
-ZSH="/etc/profiles/per-user/${USER:-$(id -un)}/share/oh-my-zsh";
-ZSH_CACHE_DIR="/home/ncrmro/.cache/oh-my-zsh";
+ZSH="$KEYSTONE_PROFILE_ROOT/share/oh-my-zsh"
+ZSH_CACHE_DIR="$HOME/.cache/oh-my-zsh"

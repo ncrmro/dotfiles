@@ -88,8 +88,18 @@ ghostty_config="${repo_dir}/packages/ghostty/.config/ghostty/config"
 uwsm_env="${repo_dir}/packages/hyprland-common/.config/uwsm/env"
 uwsm_hyprland_env="${repo_dir}/packages/hyprland-common/.config/uwsm/env-hyprland"
 zsh_env="${repo_dir}/packages/zsh/.zshenv"
+zsh_rc="${repo_dir}/packages/zsh/.zshrc"
+ssh_config="${repo_dir}/packages/ssh/.ssh/config"
 
 grep -Fxq 'shell-integration-features = ssh-env,ssh-terminfo' "${ghostty_config}"
+grep -Fq 'KEYSTONE_PROFILE_ROOT="$HOME/.nix-profile"' "${zsh_env}"
+grep -Fq 'HISTFILE="$HOME/.zsh_history"' "${zsh_rc}"
+grep -Fq 'home-manager switch --flake "$HOME/repos/ncrmro/ks-config#nicholas@unsup-macbook"' "${zsh_rc}"
+grep -Fq $'\tUserKnownHostsFile ~/.ssh/known_hosts' "${ssh_config}"
+if grep -Fq '/home/ncrmro' "${zsh_env}" "${zsh_rc}"; then
+  printf 'FAIL: zsh config contains a Linux-only home path\n' >&2
+  exit 1
+fi
 grep -Fxq '  before_sleep_cmd=keystone-lock --fail-closed' "${hypridle_conf}"
 grep -Fxq '  inhibit_sleep=3' "${hypridle_conf}"
 grep -Fxq '  lock_cmd=keystone-lock' "${hypridle_conf}"
