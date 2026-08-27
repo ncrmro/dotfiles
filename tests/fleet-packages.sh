@@ -131,13 +131,13 @@ refute() {
   fi
 }
 
-# Since Hyprland 0.56, a bareword dispatch is invalid Lua. Pin the hl.dsp.*
-# wake and blank hooks verbatim.
+# Hyprland 0.56 treats `hyprctl dispatch` as Lua shorthand. Pin the typed
+# wake and blank expressions, and reject the legacy bare dispatcher form.
 grep -Fxq '  after_sleep_cmd=keystone-dpms-wake || (hyprctl dispatch '"'"'hl.dsp.dpms({ action = "on" })'"'"' && brightnessctl -r)' "${hypridle_conf}"
 grep -Fxq '  on-resume=keystone-dpms-wake || (hyprctl dispatch '"'"'hl.dsp.dpms({ action = "on" })'"'"' && brightnessctl -r)' "${hypridle_conf}"
 grep -Fxq '  on-timeout=hyprctl dispatch '"'"'hl.dsp.dpms({ action = "off" })'"'"'' "${hypridle_conf}"
-refute 'hypridle must dispatch Lua, not a legacy bareword' \
-  -E '^[^#]*hyprctl dispatch +[a-z]' "${hypridle_conf}"
+refute 'hypridle must not use the legacy bare DPMS dispatcher form' \
+  -E '^[^#]*hyprctl dispatch[[:space:]]+dpms([[:space:]]|$)' "${hypridle_conf}"
 grep -Fq 'hl.bind("switch:on:Lid Switch", exec("keystone-suspend --lid")' "${hyprland_lua}"
 grep -Fq 'hl.bind("switch:off:Lid Switch", function()' "${hyprland_lua}"
 grep -Fq 'hl.timer(function()' "${hyprland_lua}"
