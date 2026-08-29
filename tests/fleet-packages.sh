@@ -100,7 +100,7 @@ if grep -Fq '/home/ncrmro' "${zsh_env}" "${zsh_rc}"; then
   printf 'FAIL: zsh config contains a Linux-only home path\n' >&2
   exit 1
 fi
-grep -Fxq '  before_sleep_cmd=keystone-lock --fail-closed' "${hypridle_conf}"
+grep -Fxq '  before_sleep_cmd=keystone-lock' "${hypridle_conf}"
 grep -Fxq '  inhibit_sleep=3' "${hypridle_conf}"
 grep -Fxq '  lock_cmd=keystone-lock' "${hypridle_conf}"
 grep -Fxq '  on-timeout=keystone-lock' "${hypridle_conf}"
@@ -135,6 +135,8 @@ grep -Fq 'key_press_enables_dpms = true' "${hyprland_lua}"
 grep -Fq 'mouse_move_enables_dpms = true' "${hyprland_lua}"
 refute 'lock state must come from the compositor, not pidof' \
   -F 'pidof hyprlock' "${hypridle_conf}" "${hyprland_lua}"
+refute 'runtime lock hooks must not tear down the session' \
+  -F -- '--fail-closed' "${hypridle_conf}"
 printf 'ok: lock hooks\n'
 
 grep -Fq 'local theme, load_error = loadfile(theme_path)' "${hyprland_lua}"
