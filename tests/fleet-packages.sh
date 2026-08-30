@@ -181,6 +181,8 @@ for graphical_command in \
   'keystone-window-switch'; do
   grep -Fq "app .. \"${graphical_command}\"" "${hyprland_lua}"
 done
+refute 'active Hyprland configuration must not invoke Waybar' \
+  -Ei '(^|[^[:alnum:]_])waybar([^[:alnum:]_]|$)' "${hyprland_lua}"
 
 ! grep -Eq 'systemctl --user import-environment|dbus-update-activation-environment|hyprctl dispatch exit' "${hyprland_lua}"
 ! grep -Eq 'WLR_RENDERER_ALLOW_SOFTWARE|HYPRCURSOR_' "${uwsm_env}"
