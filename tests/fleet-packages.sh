@@ -27,6 +27,70 @@ cleanup_fleet_test() {
   rm -rf "${test_root}"
 }
 trap cleanup_fleet_test EXIT
+
+assert_path_absent() {
+  local why="$1"
+  local path="$2"
+
+  if [[ -e "${path}" || -L "${path}" ]]; then
+    printf 'FAIL: %s: %s\n' "${why}" "${path}" >&2
+    return 1
+  fi
+  return 0
+}
+
+assert_find_empty() {
+  local why="$1"
+  local matches
+  shift
+
+  if ! matches="$(find "$@" -print)"; then
+    printf 'FAIL: find failed while checking %s\n' "${why}" >&2
+    return 1
+  fi
+  if [[ -n "${matches}" ]]; then
+    printf 'FAIL: %s\n%s\n' "${why}" "${matches}" >&2
+    return 1
+  fi
+  return 0
+}
+
+refute() {
+  local why="$1"
+  local status
+  shift
+
+  if grep "$@" >/dev/null; then
+    printf 'FAIL: %s\n' "${why}" >&2
+    grep -n "$@" >&2 || true
+    return 1
+  else
+    status=$?
+  fi
+  if [[ "${status}" -ne 1 ]]; then
+    printf 'FAIL: grep failed while checking %s\n' "${why}" >&2
+    return 1
+  fi
+  return 0
+}
+
+guard_fixture="${test_root}/negative-guard-fixture"
+mkdir -p "${guard_fixture}"
+printf 'forbidden marker\n' >"${guard_fixture}/present"
+if assert_path_absent fixture "${guard_fixture}/present" >/dev/null 2>&1; then
+  printf 'Path absence guard accepted an existing fixture.\n' >&2
+  exit 1
+fi
+if assert_find_empty fixture "${guard_fixture}" -type f >/dev/null 2>&1; then
+  printf 'Find guard accepted a matching fixture.\n' >&2
+  exit 1
+fi
+if refute fixture -F 'forbidden marker' "${guard_fixture}/present" >/dev/null 2>&1; then
+  printf 'Content guard accepted a matching fixture.\n' >&2
+  exit 1
+fi
+rm -rf "${guard_fixture}"
+printf 'ok: negative assertion guards reject live fixtures\n'
 stow_root="${test_root}/dotfiles"
 mkdir -p "${stow_root}"
 cp "${repo_dir}/install.sh" "${stow_root}/install.sh"
@@ -100,9 +164,12 @@ for composition in "${compositions[@]}"; do
     test -L "${test_home}/.config/hypr/user.lua"
     test -L "${test_home}/.config/uwsm/env"
     test -L "${test_home}/.config/uwsm/env-hyprland"
-    ! test -L "${test_home}/.config/hypr/hyprland.conf"
-    ! test -L "${test_home}/.config/hypr/ncrmro.conf"
-    ! test -L "${test_home}/.config/hypr/host.conf"
+    assert_path_absent 'obsolete Hyprland config remains' \
+      "${test_home}/.config/hypr/hyprland.conf"
+    assert_path_absent 'obsolete ncrmro Hyprland config remains' \
+      "${test_home}/.config/hypr/ncrmro.conf"
+    assert_path_absent 'obsolete host Hyprland config remains' \
+      "${test_home}/.config/hypr/host.conf"
     test -L "${test_home}/.config/hypr/host.lua"
   fi
 
@@ -113,8 +180,10 @@ done
 themes_dir="${repo_dir}/packages/themes/.config/keystone/theme-catalogs/user"
 mapfile -t theme_dirs < <(find "${themes_dir}" -mindepth 1 -maxdepth 1 -type d | sort)
 test "${#theme_dirs[@]}" -eq 15
-! find "${themes_dir}" -name zellij.conf -type f | grep -q .
-! test -e "${repo_dir}/packages/zellij/.config/zellij/themes/royal-green.kdl"
+assert_find_empty 'user themes contain retired zellij.conf files' \
+  "${themes_dir}" -name zellij.conf -type f
+assert_path_absent 'retired package-local royal-green Zellij theme remains' \
+  "${repo_dir}/packages/zellij/.config/zellij/themes/royal-green.kdl"
 
 test "$(find "${themes_dir}" -name helix.conf -type f | wc -l)" -eq 15
 test "$(find "${themes_dir}" -name hyprland.lua -type f | wc -l)" -eq 2
@@ -153,18 +222,6 @@ grep -Fxq '  inhibit_sleep=3' "${hypridle_conf}"
 grep -Fxq '  lock_cmd=keystone-lock' "${hypridle_conf}"
 grep -Fxq '  on-timeout=keystone-lock' "${hypridle_conf}"
 grep -Fxq '  timeout=300' "${hypridle_conf}"
-# `set -e` does NOT abort on a `!`-negated command, so every negative
-# assertion here must go through refute() or it silently passes forever.
-refute() {
-  local why="$1"
-  shift
-  if grep "$@" >/dev/null; then
-    printf 'FAIL: %s\n' "${why}" >&2
-    grep -n "$@" >&2 || true
-    exit 1
-  fi
-}
-
 # Hyprland 0.56 treats `hyprctl dispatch` as Lua shorthand. Pin the typed
 # wake and blank expressions, and reject the legacy bare dispatcher form.
 grep -Fxq '  after_sleep_cmd=keystone-dpms-wake || (hyprctl dispatch '"'"'hl.dsp.dpms({ action = "on" })'"'"' && brightnessctl -r)' "${hypridle_conf}"
@@ -213,14 +270,19 @@ done
 refute 'active Hyprland configuration must not invoke Waybar' \
   -Ei '(^|[^[:alnum:]_])waybar([^[:alnum:]_]|$)' "${startup_configs[@]}"
 
-! grep -Eq 'systemctl --user import-environment|dbus-update-activation-environment|hyprctl dispatch exit' "${hyprland_lua}"
-! grep -Eq 'WLR_RENDERER_ALLOW_SOFTWARE|HYPRCURSOR_' "${uwsm_env}"
-! grep -Eq '^[[:space:]]*export[[:space:]]+GTK_THEME=' "${uwsm_env}"
+refute 'Hyprland config must not import or tear down the session environment' \
+  -E 'systemctl --user import-environment|dbus-update-activation-environment|hyprctl dispatch exit' \
+  "${hyprland_lua}"
+refute 'generic UWSM environment must not set renderer or cursor overrides' \
+  -E 'WLR_RENDERER_ALLOW_SOFTWARE|HYPRCURSOR_' "${uwsm_env}"
+refute 'generic UWSM environment must not force GTK_THEME' \
+  -E '^[[:space:]]*export[[:space:]]+GTK_THEME=' "${uwsm_env}"
 grep -Fxq 'export XDG_DATA_DIRS="${XDG_DATA_DIRS:-$HOME/.local/share:/usr/local/share:/usr/share}:$HOME/.nix-profile/share:/nix/var/nix/profiles/default/share"' "${uwsm_env}"
 grep -Fxq 'export SSH_AUTH_SOCK="${XDG_RUNTIME_DIR}/gcr/ssh"' "${uwsm_env}"
 grep -Fxq 'export HYPRCURSOR_SIZE=24' "${uwsm_hyprland_env}"
 grep -Fxq 'export HYPRCURSOR_THEME=Adwaita' "${uwsm_hyprland_env}"
-! grep -Fq 'WLR_RENDERER_ALLOW_SOFTWARE' "${uwsm_hyprland_env}"
+refute 'Hyprland UWSM environment must not allow the software renderer' \
+  -F 'WLR_RENDERER_ALLOW_SOFTWARE' "${uwsm_hyprland_env}"
 
 zsh -n "${zsh_env}"
 socket_test_root="$(mktemp -d)"
@@ -258,8 +320,13 @@ cleanup_socket_test
 printf 'ok: SSH agent socket selection\n'
 
 test "$(find "${repo_dir}/packages/themes/.config/keystone/theme-catalogs/user" -name hyprland.lua -type f | wc -l)" -eq 2
-! find "${repo_dir}/packages/themes/.config/keystone/theme-catalogs/user" -name hyprland.conf -type f | grep -q .
-! find "${repo_dir}/packages" \( -path '*/hyprland.conf' -o -path '*/ncrmro.conf' -o -path '*/host.conf' \) -type f | grep -q .
+assert_find_empty 'user themes contain retired hyprland.conf files' \
+  "${repo_dir}/packages/themes/.config/keystone/theme-catalogs/user" \
+  -name hyprland.conf -type f
+assert_find_empty 'packages contain retired Hyprland configuration files' \
+  "${repo_dir}/packages" \
+  \( -path '*/hyprland.conf' -o -path '*/ncrmro.conf' -o -path '*/host.conf' \) \
+  -type f
 
 for ecosystem_config in hypridle.conf hyprlock.conf hyprpaper.conf hyprsunset.conf xdph.conf; do
   test -f "${repo_dir}/packages/hyprland-common/.config/hypr/${ecosystem_config}"
@@ -274,7 +341,7 @@ start_callbacks_are_safe() {
       # typed dispatch and configuration work. They must not launch a shell,
       # process, GUI, or long-lived service, directly or through a local
       # alias of a Hyprland command dispatcher.
-      function unsafe(callback, normalized, remaining, captures, alias, pattern) {
+      function unsafe(callback, normalized, remaining, assignment, alias, pattern) {
         normalized = callback
         gsub(/[[:space:]]+/, " ", normalized)
         if (normalized ~ /hl[.]exec_(cmd|raw)[[:space:]]*\(/ \
@@ -287,8 +354,12 @@ start_callbacks_are_safe() {
 
         remaining = normalized
         pattern = "(^|[^[:alnum:]_])((local[[:space:]]+)?([[:alpha:]_][[:alnum:]_]*))[[:space:]]*=[[:space:]]*hl[.](dsp[.])?exec_(cmd|raw)([^[:alnum:]_]|$)"
-        while (match(remaining, pattern, captures)) {
-          alias = captures[4]
+        while (match(remaining, pattern)) {
+          assignment = substr(remaining, RSTART, RLENGTH)
+          sub(/^[^[:alpha:]_]*/, "", assignment)
+          sub(/^local[[:space:]]+/, "", assignment)
+          sub(/[[:space:]]*=.*/, "", assignment)
+          alias = assignment
           if (normalized ~ ("(^|[^[:alnum:]_])" alias "[[:space:]]*[(]")) {
             return 1
           }

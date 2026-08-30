@@ -39,8 +39,13 @@ Run the complete worktree-transition and fleet-package regression suite with:
 ./tests/run.sh
 ```
 
-The suite uses disposable homes and a disposable package copy. It MUST NOT
-edit the tracked package checkout.
+The suite requires Git, Bash 4 or newer, GNU Stow, GNU coreutils, Zsh, and
+`ssh-agent`. By default it also requires Nix with network access or an already
+populated store. The Hyprland composition test builds the pinned Hyprland
+revision and Lua 5.4 with Nix. To avoid those builds, set both `HYPRLAND_BIN`
+and `LUA_BIN` to compatible local executables; the Hyprland binary MUST still
+report the pinned version and revision. The suite uses disposable homes and a
+disposable package copy. It MUST NOT edit the tracked package checkout.
 
 Configuration in `packages/` should refer to dependencies by executable name,
 not by `/nix/store` path, so Nix can continue to own dependency provisioning.

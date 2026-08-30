@@ -35,12 +35,20 @@ coreutils_shim_log="${test_root}/coreutils-shim.log"
 mkdir -p "${coreutils_shim}"
 printf '%s\n' \
   '#!/bin/sh' \
-  'printf "grealpath\n" >>"${COREUTILS_SHIM_LOG}"' \
+  'if [ "${1-}" != --version ]; then' \
+  '  printf grealpath >>"${COREUTILS_SHIM_LOG}"' \
+  '  for argument do printf "\t%s" "${argument}" >>"${COREUTILS_SHIM_LOG}"; done' \
+  '  printf "\n" >>"${COREUTILS_SHIM_LOG}"' \
+  'fi' \
   "exec \"${test_realpath}\" \"\$@\"" \
   >"${coreutils_shim}/grealpath"
 printf '%s\n' \
   '#!/bin/sh' \
-  'printf "gmv\n" >>"${COREUTILS_SHIM_LOG}"' \
+  'if [ "${1-}" != --version ]; then' \
+  '  printf gmv >>"${COREUTILS_SHIM_LOG}"' \
+  '  for argument do printf "\t%s" "${argument}" >>"${COREUTILS_SHIM_LOG}"; done' \
+  '  printf "\n" >>"${COREUTILS_SHIM_LOG}"' \
+  'fi' \
   "exec \"${test_mv}\" \"\$@\"" \
   >"${coreutils_shim}/gmv"
 chmod +x "${coreutils_shim}/grealpath" "${coreutils_shim}/gmv"
@@ -59,18 +67,19 @@ snapshot_home() {
 
   (
     cd "${home}"
-    while IFS= read -r -d '' path; do
+    while IFS= read -r path; do
+      [[ "${path}" == . ]] && continue
       if [[ -L "${path}" ]]; then
-        printf 'link %s -> %s\n' "${path}" "$(readlink -- "${path}")"
+        printf 'link %s -> %s\n' "${path}" "$(readlink "${path}")"
       elif [[ -f "${path}" ]]; then
         printf 'file %s ' "${path}"
-        sha256sum -- "${path}"
+        cksum <"${path}"
       elif [[ -d "${path}" ]]; then
         printf 'directory %s\n' "${path}"
       else
         printf 'other %s\n' "${path}"
       fi
-    done < <(find . -mindepth 1 -print0 | sort -z)
+    done < <(find . -print | LC_ALL=C sort)
   )
 }
 
@@ -110,15 +119,17 @@ assert_target \
   "${test_root}/canonical/packages/git/.config/git/config"
 
 # canonical -> worktree: check is non-mutating, install atomically retargets.
-before="$(readlink -- "${home}/.config/git/config")"
+before="$(readlink "${home}/.config/git/config")"
 HOME="${home}" "${test_root}/sibling/install.sh" --check git
-test "$(readlink -- "${home}/.config/git/config")" = "${before}"
+test "$(readlink "${home}/.config/git/config")" = "${before}"
+: >"${coreutils_shim_log}"
 COREUTILS_SHIM_LOG="${coreutils_shim_log}" \
   PATH="${coreutils_shim}:${PATH}" \
   HOME="${home}" \
   "${test_root}/sibling/install.sh" git
-grep -Fxq grealpath "${coreutils_shim_log}"
-grep -Fxq gmv "${coreutils_shim_log}"
+grep -Eq $'^grealpath\t-m\t--\t' "${coreutils_shim_log}"
+grep -Eq $'^gmv\t-Tf\t--\t.*[.]dotfiles-retarget[.][0-9]+\t.*/[.]config/git/config$' \
+  "${coreutils_shim_log}"
 assert_target \
   "${home}/.config/git/config" \
   "${test_root}/sibling/packages/git/.config/git/config"
@@ -201,12 +212,12 @@ HOME="${home}" "${test_root}/canonical/install.sh" git ssh
 mkdir -p "${home}/collision"
 mv "${home}/.ssh/config" "${home}/collision/ssh-config-link"
 printf 'collision\n' >"${home}/.ssh/config"
-git_link_before="$(readlink -- "${home}/.config/git/config")"
+git_link_before="$(readlink "${home}/.config/git/config")"
 if HOME="${home}" "${test_root}/sibling/install.sh" git ssh >/dev/null 2>&1; then
   printf 'installation with a later collision succeeded\n' >&2
   exit 1
 fi
-test "$(readlink -- "${home}/.config/git/config")" = "${git_link_before}"
+test "$(readlink "${home}/.config/git/config")" = "${git_link_before}"
 test -f "${home}/.ssh/config"
 test "$(cat "${home}/.ssh/config")" = collision
 

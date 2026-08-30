@@ -13,6 +13,18 @@ if grep -Fq 'trap - EXIT' "${repo_dir}/tests/fleet-packages.sh"; then
   printf 'Fleet tests disable their process-wide cleanup trap.\n' >&2
   exit 1
 fi
+if grep -Eq '^[[:space:]]*![[:space:]]' "${repo_dir}/tests/fleet-packages.sh"; then
+  printf 'Fleet tests contain a bare negated assertion.\n' >&2
+  exit 1
+fi
+if grep -Eq 'match\([^)]*,[^)]*,' "${repo_dir}/tests/fleet-packages.sh"; then
+  printf 'Fleet tests contain a non-portable three-argument awk match.\n' >&2
+  exit 1
+fi
+if grep -Eq 'sha256sum|sort -z|-print0' "${repo_dir}/tests/stow-worktrees.sh"; then
+  printf 'Worktree snapshots depend on GNU-only traversal or hashing.\n' >&2
+  exit 1
+fi
 
 "${repo_dir}/tests/stow-worktrees.sh"
 "${repo_dir}/tests/fleet-packages.sh"

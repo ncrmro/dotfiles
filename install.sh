@@ -157,8 +157,8 @@ fi
 
 selected_packages=()
 for package in "${selected[@]}"; do
-  for selected_package in "${selected_packages[@]}"; do
-    if [[ "${selected_package}" == "${package}" ]]; then
+  for ((selected_i = 0; selected_i < ${#selected_packages[@]}; selected_i++)); do
+    if [[ "${selected_packages[selected_i]}" == "${package}" ]]; then
       printf 'Duplicate dotfiles package: %s\n' "${package}" >&2
       exit 1
     fi
