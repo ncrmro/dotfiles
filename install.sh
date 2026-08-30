@@ -61,12 +61,30 @@ if [[ "${1:-}" == "--check" ]]; then
   shift
 fi
 
-git_common_dir="$(
-  git -C "${repo_dir}" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true
-)"
-if [[ -n "${git_common_dir}" ]]; then
-  git_common_dir="$("${realpath_bin}" -m -- "${git_common_dir}")"
+if ! repo_top="$(git -C "${repo_dir}" rev-parse --show-toplevel 2>/dev/null)"; then
+  printf 'The dotfiles installer must be inside a Git worktree: %s\n' \
+    "${repo_dir}" >&2
+  exit 1
 fi
+repo_top="$("${realpath_bin}" -m -- "${repo_top}")"
+if [[ "${repo_top}" != "${repo_dir}" ]]; then
+  printf 'The dotfiles installer must be at the repository root: %s (found %s)\n' \
+    "${repo_dir}" "${repo_top}" >&2
+  exit 1
+fi
+if [[ ! -d "${repo_top}/packages" || "${packages_dir}" != "${repo_top}/packages" ]]; then
+  printf 'The repository root must contain the dotfiles packages directory: %s\n' \
+    "${repo_top}/packages" >&2
+  exit 1
+fi
+if ! git_common_dir="$(
+  git -C "${repo_top}" rev-parse --path-format=absolute --git-common-dir 2>/dev/null
+)"; then
+  printf 'Git 2.31 or newer is required to resolve dotfiles worktree ownership: %s\n' \
+    "${repo_top}" >&2
+  exit 1
+fi
+git_common_dir="$("${realpath_bin}" -m -- "${git_common_dir}")"
 
 retargetable_link() {
   local target="$1"
@@ -80,15 +98,20 @@ retargetable_link() {
   current="$("${realpath_bin}" -m -- "${target}")"
   [[ -e "${current}" ]] || return 1
 
-  current_repo="$(
-    git -C "$(dirname "${current}")" rev-parse --show-toplevel 2>/dev/null || true
-  )"
-  [[ -n "${current_repo}" ]] || return 1
+  if ! current_repo="$(
+    git -C "$(dirname "${current}")" rev-parse --show-toplevel 2>/dev/null
+  )"; then
+    printf 'Linked source is not inside a Git worktree: %s\n' "${current}" >&2
+    return 1
+  fi
   current_repo="$("${realpath_bin}" -m -- "${current_repo}")"
-  current_common_dir="$(
-    git -C "${current_repo}" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true
-  )"
-  [[ -n "${current_common_dir}" ]] || return 1
+  if ! current_common_dir="$(
+    git -C "${current_repo}" rev-parse --path-format=absolute --git-common-dir 2>/dev/null
+  )"; then
+    printf 'Git 2.31 or newer is required to inspect linked worktree ownership: %s\n' \
+      "${current_repo}" >&2
+    return 1
+  fi
   current_common_dir="$("${realpath_bin}" -m -- "${current_common_dir}")"
   [[ -n "${git_common_dir}" && "${current_common_dir}" == "${git_common_dir}" ]] || return 1
 
@@ -102,28 +125,51 @@ retargetable_link() {
   return 0
 }
 
-retarget_link() {
+replace_link() {
   local target="$1"
-  local expected="$2"
-  local relative
+  local link_value="$2"
   local temporary
 
-  relative="$(
-    "${realpath_bin}" -m --relative-to="$(dirname "${target}")" "${expected}"
-  )"
   temporary="${target}.dotfiles-retarget.$$"
   if [[ -e "${temporary}" || -L "${temporary}" ]]; then
     printf 'Temporary retarget path already exists: %s\n' "${temporary}" >&2
     return 1
   fi
   retarget_temporary="${temporary}"
-  ln -s "${relative}" "${temporary}"
+  ln -s "${link_value}" "${temporary}"
   if ! "${mv_bin}" -Tf -- "${temporary}" "${target}"; then
     cleanup_retarget_temporary
     return 1
   fi
   retarget_temporary=""
   return 0
+}
+
+retarget_link() {
+  local target="$1"
+  local expected="$2"
+  local relative
+
+  relative="$(
+    "${realpath_bin}" -m --relative-to="$(dirname "${target}")" "${expected}"
+  )"
+  replace_link "${target}" "${relative}"
+}
+
+rollback_retargets() {
+  local last_index="$1"
+  local rollback_failed=0
+  local rollback_i
+
+  for ((rollback_i = last_index; rollback_i >= 0; rollback_i--)); do
+    if ! replace_link \
+      "${retarget_targets[rollback_i]}" "${retarget_originals[rollback_i]}"; then
+      printf 'Rollback failed for retargeted link: %s\n' \
+        "${retarget_targets[rollback_i]}" >&2
+      rollback_failed=1
+    fi
+  done
+  return "${rollback_failed}"
 }
 
 planned_leaf_target() {
@@ -212,7 +258,11 @@ for package in "${selected[@]}"; do
   while IFS= read -r -d '' source; do
     relative="${source#"${package_dir}/"}"
     target="${home_dir}/${relative}"
-    expected_relative="packages/${package}/${relative}"
+    expected_relative="${source#"${repo_top}/"}"
+    if [[ "${expected_relative}" == "${source}" ]]; then
+      printf 'Package source is outside the repository root: %s\n' "${source}" >&2
+      exit 1
+    fi
     for ((i = 0; i < ${#targets[@]}; i++)); do
       if [[ "${targets[i]}" == "${target}" ]]; then
         printf 'Duplicate target: %s (%s and %s)\n' \
@@ -227,7 +277,9 @@ for package in "${selected[@]}"; do
 done
 
 broken=0
-retargets=()
+retarget_targets=()
+retarget_expecteds=()
+retarget_originals=()
 for ((i = 0; i < ${#sources[@]}; i++)); do
   source="${sources[i]}"
   target="${targets[i]}"
@@ -246,7 +298,9 @@ for ((i = 0; i < ${#sources[@]}; i++)); do
     current_link="$(readlink "${target}")"
     if [[ "${current_link}" != "${expected_link}" ]]; then
       if retargetable_link "${target}" "${expected_relative}"; then
-        retargets+=("${target}" "${expected}")
+        retarget_targets+=("${target}")
+        retarget_expecteds+=("${expected}")
+        retarget_originals+=("${current_link}")
       else
         printf 'Unexpected link target: %s -> %s (expected %s)\n' \
           "${target}" "${resolved}" "${expected}" >&2
@@ -267,19 +321,27 @@ if [[ "${check}" == true ]]; then
   # This explicit walk is the authoritative collision check. GNU Stow's
   # simulation rejects a safe sibling-worktree transition based on the link's
   # lexical spelling even when both sources have identical repository paths.
-  for ((i = 0; i < ${#retargets[@]}; i += 2)); do
+  for ((i = 0; i < ${#retarget_targets[@]}; i++)); do
     relative="$(
       "${realpath_bin}" -m \
-        --relative-to="$(dirname "${retargets[i]}")" "${retargets[i + 1]}"
+        --relative-to="$(dirname "${retarget_targets[i]}")" "${retarget_expecteds[i]}"
     )"
-    printf 'Would retarget: %s -> %s\n' "${retargets[i]}" "${relative}"
+    printf 'Would retarget: %s -> %s\n' "${retarget_targets[i]}" "${relative}"
   done
   exit 0
 fi
 
 # No link is changed until every selected package, target, and parent passes.
-for ((i = 0; i < ${#retargets[@]}; i += 2)); do
-  retarget_link "${retargets[i]}" "${retargets[i + 1]}"
+# If an atomic move fails, restore every link moved earlier in this batch.
+for ((i = 0; i < ${#retarget_targets[@]}; i++)); do
+  if ! retarget_link "${retarget_targets[i]}" "${retarget_expecteds[i]}"; then
+    printf 'Failed to retarget link: %s; rolling back %d earlier link(s).\n' \
+      "${retarget_targets[i]}" "${i}" >&2
+    if ! rollback_retargets "$((i - 1))"; then
+      printf 'Retarget rollback was incomplete; inspect the reported links.\n' >&2
+    fi
+    exit 1
+  fi
 done
 
 stow "${stow_args[@]}" "${selected[@]}"

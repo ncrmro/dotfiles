@@ -2,7 +2,7 @@
 set -euo pipefail
 
 repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-test_root="$(mktemp -d)"
+test_root="$(mktemp -d "${TMPDIR:-/tmp}/dotfiles-fleet-packages.XXXXXXXXXX")"
 socket_test_root=""
 socket_agent_pid=""
 callback_test_root=""
@@ -117,6 +117,7 @@ stow_root="${test_root}/dotfiles"
 mkdir -p "${stow_root}"
 cp "${repo_dir}/install.sh" "${stow_root}/install.sh"
 cp -a "${repo_dir}/packages" "${stow_root}/packages"
+git init -q "${stow_root}"
 terminal=(bin bat btop git helix lazygit ssh themes zellij zsh)
 desktop=(clipse ghostty hyprland-common omarchy satty walker wofi)
 
@@ -287,8 +288,18 @@ grep -Fq 'hl.bind("switch:on:Lid Switch", exec("keystone-suspend --lid")' "${hyp
 grep -Fq 'hl.bind("switch:off:Lid Switch", function()' "${hyprland_lua}"
 grep -Fq 'hl.timer(function()' "${hyprland_lua}"
 grep -Fq 'hl.dispatch(hl.dsp.dpms({ action = "on" }))' "${hyprland_lua}"
+lid_dpms_fixture="${test_root}/unsafe-lid-dpms.lua"
+printf 'hl.bind("switch:on:n", hl.dsp.dpms({ action = "on" }))\n' \
+  >"${lid_dpms_fixture}"
+if refute fixture -E 'hl\.bind\(.*hl\.dsp\.dpms' "${lid_dpms_fixture}" \
+  >/dev/null 2>&1; then
+  printf 'Lid DPMS guard accepted a same-line violation containing n.\n' >&2
+  exit 1
+fi
+rm "${lid_dpms_fixture}"
 refute 'lid-open DPMS must dispatch from a timer, not straight from the bind' \
-  -E 'hl\.bind\([^\n]*hl\.dsp\.dpms' "${hyprland_lua}"
+  -E 'hl\.bind\(.*hl\.dsp\.dpms' "${hyprland_lua}"
+printf 'ok: lid DPMS line guard rejects a live n-containing violation\n'
 # Input is the recovery path that does not depend on any hypridle hook firing.
 grep -Fq 'key_press_enables_dpms = true' "${hyprland_lua}"
 grep -Fq 'mouse_move_enables_dpms = true' "${hyprland_lua}"
@@ -340,7 +351,7 @@ refute 'Hyprland UWSM environment must not allow the software renderer' \
   -F 'WLR_RENDERER_ALLOW_SOFTWARE' "${uwsm_hyprland_env}"
 
 zsh -n "${zsh_env}"
-socket_test_root="$(mktemp -d)"
+socket_test_root="$(mktemp -d "${TMPDIR:-/tmp}/dotfiles-ssh-socket.XXXXXXXXXX")"
 mkdir -p "${socket_test_root}/gcr"
 
 SSH_AUTH_SOCK="${socket_test_root}/inherited" \
@@ -498,7 +509,7 @@ start_callbacks_are_safe() {
 
 start_callbacks_are_safe "${startup_configs[@]}"
 
-callback_test_root="$(mktemp -d)"
+callback_test_root="$(mktemp -d "${TMPDIR:-/tmp}/dotfiles-start-callback.XXXXXXXXXX")"
 unsafe_fixture="${callback_test_root}/unsafe.lua"
 for unsafe_dispatcher in hl.exec_cmd hl.dsp.exec_cmd hl.exec_raw hl.dsp.exec_raw; do
   cat >"${unsafe_fixture}" <<LUA

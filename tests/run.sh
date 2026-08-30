@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Requirements: Bash 3.2+, Git, GNU Stow, GNU coreutils, Zsh, and ssh-agent.
+# Requirements: Bash 3.2+, Git 2.31+, GNU Stow/coreutils, Zsh, and ssh-agent.
 # By default the Hyprland suite also needs Nix plus network access or populated
 # store paths for pinned Hyprland and Lua 5.4 builds. Set both HYPRLAND_BIN and
 # LUA_BIN to compatible local executables to skip those builds; HYPRLAND_BIN
@@ -26,7 +26,7 @@ if grep -Eq 'match\([^)]*,[^)]*,' "${repo_dir}/tests/fleet-packages.sh"; then
   printf 'Fleet tests contain a non-portable three-argument awk match.\n' >&2
   exit 1
 fi
-if grep -En 'm[a]pfile|read[a]rray|-p[r]intf|[(]realp[a]th[[:space:]]|sha256s[u]m|sort -[z]|-print[0]' \
+if grep -En 'm[a]pfile|read[a]rray|-p[r]intf|[(]realp[a]th[[:space:]]|sha256s[u]m|sort -[z]|-print[0]|mktemp[[:space:]]+-d[)]' \
   "${repo_dir}"/tests/*.sh; then
   printf 'Tests contain an unselected GNU command or a Bash-newer-than-3.2 primitive.\n' >&2
   exit 1

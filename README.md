@@ -39,7 +39,8 @@ Run the complete worktree-transition and fleet-package regression suite with:
 ./tests/run.sh
 ```
 
-The suite requires Git, Bash 3.2 or newer, GNU Stow, GNU coreutils, Zsh, and
+The suite requires Git 2.31 or newer, Bash 3.2 or newer, GNU Stow, GNU
+coreutils, Zsh, and
 `ssh-agent`. By default it also requires Nix with network access or an already
 populated store. The Hyprland composition test builds the pinned Hyprland
 revision and Lua 5.4 with Nix. To avoid those builds, set both `HYPRLAND_BIN`
