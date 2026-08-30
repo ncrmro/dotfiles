@@ -2,6 +2,12 @@
 set -euo pipefail
 
 repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+test_root="$(mktemp -d)"
+trap 'rm -rf "${test_root}"' EXIT
+stow_root="${test_root}/dotfiles"
+mkdir -p "${stow_root}"
+cp "${repo_dir}/install.sh" "${stow_root}/install.sh"
+cp -a "${repo_dir}/packages" "${stow_root}/packages"
 terminal=(bin bat btop git helix lazygit ssh themes zellij zsh)
 desktop=(clipse ghostty hyprland-common omarchy satty walker wofi)
 
@@ -28,18 +34,29 @@ seed_obsolete_stow_link() {
 for composition in "${compositions[@]}"; do
   host="${composition%%:*}"
   read -r -a packages <<<"${composition#*:}"
-  test_home="$(mktemp -d)"
-  trap 'rm -rf "${test_home}"' EXIT
+  test_home="${test_root}/home-${host}"
+  mkdir -p "${test_home}"
 
   if [[ " ${packages[*]} " == *" hyprland-common "* ]]; then
     mkdir -p "${test_home}/.config/hypr"
     seed_obsolete_stow_link \
-      "${repo_dir}/packages/hyprland-common/.config/hypr/hyprland.conf" \
+      "${stow_root}/packages/hyprland-common/.config/hypr/hyprland.conf" \
       "${test_home}/.config/hypr/hyprland.conf"
     seed_obsolete_stow_link \
-      "${repo_dir}/packages/hyprland-common/.config/hypr/ncrmro.conf" \
+      "${stow_root}/packages/hyprland-common/.config/hypr/ncrmro.conf" \
       "${test_home}/.config/hypr/ncrmro.conf"
   fi
+
+  for package in "${packages[@]}"; do
+    if [[ "${package}" == hyprland-* && "${package}" != "hyprland-common" ]]; then
+      seed_obsolete_stow_link \
+        "${stow_root}/packages/${package}/.config/hypr/host.conf" \
+        "${test_home}/.config/hypr/host.conf"
+    fi
+  done
+
+  HOME="${test_home}" "${stow_root}/install.sh" "${packages[@]}"
+  HOME="${test_home}" "${stow_root}/install.sh" --check "${packages[@]}"
 
   if [[ " ${packages[*]} " == *" omarchy "* ]]; then
     shell_config="${test_home}/.config/omarchy/shell.json"
@@ -50,21 +67,10 @@ for composition in "${compositions[@]}"; do
     test -L "${shell_config}"
     test "$(readlink "${shell_config}")" = "${shell_target}"
     printf '%s\n' "${shell_original}" >"${shell_config}"
-    HOME="${test_home}" "${repo_dir}/install.sh" omarchy
+    HOME="${test_home}" "${stow_root}/install.sh" omarchy
     test -L "${shell_config}"
     test "$(readlink "${shell_config}")" = "${shell_target}"
   fi
-
-  for package in "${packages[@]}"; do
-    if [[ "${package}" == hyprland-* && "${package}" != "hyprland-common" ]]; then
-      seed_obsolete_stow_link \
-        "${repo_dir}/packages/${package}/.config/hypr/host.conf" \
-        "${test_home}/.config/hypr/host.conf"
-    fi
-  done
-
-  HOME="${test_home}" "${repo_dir}/install.sh" "${packages[@]}"
-  HOME="${test_home}" "${repo_dir}/install.sh" --check "${packages[@]}"
 
   if [[ " ${packages[*]} " == *" hyprland-common "* ]]; then
     test -L "${test_home}/.config/hypr/hyprland.lua"
@@ -78,7 +84,6 @@ for composition in "${compositions[@]}"; do
   fi
 
   rm -rf "${test_home}"
-  trap - EXIT
   printf 'ok: %s\n' "${host}"
 done
 

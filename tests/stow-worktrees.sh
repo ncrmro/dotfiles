@@ -7,52 +7,168 @@ trap 'rm -rf "${test_root}"' EXIT
 
 git clone -q --no-hardlinks "${repo_dir}" "${test_root}/canonical"
 git -C "${test_root}/canonical" worktree add -q -b test/sibling "${test_root}/sibling"
-# The regression runs before this change is committed, so place the current
-# implementation into both disposable checkouts.
+# Tests can run before this change is committed, so use the implementation
+# under test in both disposable checkouts.
 cp "${repo_dir}/install.sh" "${test_root}/canonical/install.sh"
 cp "${repo_dir}/install.sh" "${test_root}/sibling/install.sh"
 
 assert_target() {
   local target="$1"
   local expected="$2"
-  test "$(realpath -m "${target}")" = "$(realpath -m "${expected}")"
+
+  test "$(realpath -m -- "${target}")" = "$(realpath -m -- "${expected}")"
 }
 
-home="${test_root}/home"
-mkdir -p "${home}"
+snapshot_home() {
+  local home="$1"
+  local path
+
+  (
+    cd "${home}"
+    while IFS= read -r -d '' path; do
+      if [[ -L "${path}" ]]; then
+        printf 'link %s -> %s\n' "${path}" "$(readlink -- "${path}")"
+      elif [[ -f "${path}" ]]; then
+        printf 'file %s ' "${path}"
+        sha256sum -- "${path}"
+      elif [[ -d "${path}" ]]; then
+        printf 'directory %s\n' "${path}"
+      else
+        printf 'other %s\n' "${path}"
+      fi
+    done < <(find . -mindepth 1 -print0 | sort -z)
+  )
+}
+
+assert_check_rejected() {
+  local home="$1"
+  local installer="$2"
+  local why="$3"
+  local after
+  local before
+  shift 3
+
+  before="$(snapshot_home "${home}")"
+  if HOME="${home}" "${installer}" --check "$@" >/dev/null 2>&1; then
+    printf '%s was accepted\n' "${why}" >&2
+    exit 1
+  fi
+  after="$(snapshot_home "${home}")"
+  if [[ "${after}" != "${before}" ]]; then
+    printf '%s mutated HOME during --check\n' "${why}" >&2
+    diff -u <(printf '%s\n' "${before}") <(printf '%s\n' "${after}") >&2 || true
+    exit 1
+  fi
+}
+
+new_home() {
+  local name="$1"
+  local home="${test_root}/homes/${name}"
+
+  mkdir -p "${home}"
+  printf '%s\n' "${home}"
+}
+
+home="$(new_home transitions)"
 HOME="${home}" "${test_root}/canonical/install.sh" git
-assert_target "${home}/.config/git/config" "${test_root}/canonical/packages/git/.config/git/config"
+assert_target \
+  "${home}/.config/git/config" \
+  "${test_root}/canonical/packages/git/.config/git/config"
 
 # canonical -> worktree: check is non-mutating, install atomically retargets.
-before="$(readlink "${home}/.config/git/config")"
+before="$(readlink -- "${home}/.config/git/config")"
 HOME="${home}" "${test_root}/sibling/install.sh" --check git
-test "$(readlink "${home}/.config/git/config")" = "${before}"
+test "$(readlink -- "${home}/.config/git/config")" = "${before}"
 HOME="${home}" "${test_root}/sibling/install.sh" git
-assert_target "${home}/.config/git/config" "${test_root}/sibling/packages/git/.config/git/config"
+assert_target \
+  "${home}/.config/git/config" \
+  "${test_root}/sibling/packages/git/.config/git/config"
 
 # Unchanged links are accepted, then worktree -> canonical is symmetric.
 HOME="${home}" "${test_root}/sibling/install.sh" --check git
 HOME="${home}" "${test_root}/canonical/install.sh" --check git
 HOME="${home}" "${test_root}/canonical/install.sh" git
-assert_target "${home}/.config/git/config" "${test_root}/canonical/packages/git/.config/git/config"
+assert_target \
+  "${home}/.config/git/config" \
+  "${test_root}/canonical/packages/git/.config/git/config"
 
-# An unrelated symlink and a regular file remain hard failures.
-rm "${home}/.config/git/config"
+home="$(new_home leaf-collisions)"
+mkdir -p "${home}/.config/git"
 ln -s /tmp/unrelated "${home}/.config/git/config"
-if HOME="${home}" "${test_root}/canonical/install.sh" --check git 2>/dev/null; then
-  echo "unrelated symlink was accepted" >&2
-  exit 1
-fi
+assert_check_rejected \
+  "${home}" "${test_root}/canonical/install.sh" "unrelated symlink" git
+rm "${home}/.config/git/config"
+ln -s /tmp/missing-dotfiles-source "${home}/.config/git/config"
+assert_check_rejected \
+  "${home}" "${test_root}/canonical/install.sh" "broken leaf symlink" git
 rm "${home}/.config/git/config"
 printf 'collision\n' >"${home}/.config/git/config"
-if HOME="${home}" "${test_root}/canonical/install.sh" --check git 2>/dev/null; then
-  echo "regular-file collision was accepted" >&2
+assert_check_rejected \
+  "${home}" "${test_root}/canonical/install.sh" "regular-file collision" git
+
+# A same-repository path with the old accepted suffix is not package ownership.
+home="$(new_home suffix-collision)"
+mkdir -p \
+  "${home}/.config/git" \
+  "${test_root}/canonical/unrelated/packages/git/.config/git"
+cp \
+  "${test_root}/canonical/packages/git/.config/git/config" \
+  "${test_root}/canonical/unrelated/packages/git/.config/git/config"
+ln -s \
+  "${test_root}/canonical/unrelated/packages/git/.config/git/config" \
+  "${home}/.config/git/config"
+assert_check_rejected \
+  "${home}" "${test_root}/canonical/install.sh" "suffix-only ownership" git
+
+# An exact package-relative path in a worktree from another clone is unrelated.
+git clone -q --no-hardlinks "${repo_dir}" "${test_root}/unrelated-canonical"
+git -C "${test_root}/unrelated-canonical" worktree add -q -b test/unrelated \
+  "${test_root}/unrelated-worktree"
+home="$(new_home unrelated-worktree)"
+mkdir -p "${home}/.config/git"
+ln -s \
+  "${test_root}/unrelated-worktree/packages/git/.config/git/config" \
+  "${home}/.config/git/config"
+assert_check_rejected \
+  "${home}" "${test_root}/canonical/install.sh" "unrelated worktree" git
+
+home="$(new_home parent-collisions)"
+printf 'not a directory\n' >"${home}/.config"
+assert_check_rejected \
+  "${home}" "${test_root}/canonical/install.sh" "regular parent" git
+rm "${home}/.config"
+mkdir -p "${test_root}/foreign-config"
+ln -s "${test_root}/foreign-config" "${home}/.config"
+assert_check_rejected \
+  "${home}" "${test_root}/canonical/install.sh" "foreign directory symlink" git
+rm "${home}/.config"
+ln -s "${test_root}/missing-config" "${home}/.config"
+assert_check_rejected \
+  "${home}" "${test_root}/canonical/install.sh" "broken parent symlink" git
+
+home="$(new_home package-errors)"
+assert_check_rejected \
+  "${home}" "${test_root}/canonical/install.sh" "missing package" missing
+assert_check_rejected \
+  "${home}" "${test_root}/canonical/install.sh" "duplicate package" git git
+cp -a "${test_root}/canonical/packages/git" \
+  "${test_root}/canonical/packages/duplicate-git"
+assert_check_rejected \
+  "${home}" "${test_root}/canonical/install.sh" "duplicate target" git duplicate-git
+
+# A later collision prevents an earlier valid worktree link from retargeting.
+home="$(new_home complete-pass)"
+HOME="${home}" "${test_root}/canonical/install.sh" git ssh
+mkdir -p "${home}/collision"
+mv "${home}/.ssh/config" "${home}/collision/ssh-config-link"
+printf 'collision\n' >"${home}/.ssh/config"
+git_link_before="$(readlink -- "${home}/.config/git/config")"
+if HOME="${home}" "${test_root}/sibling/install.sh" git ssh >/dev/null 2>&1; then
+  printf 'installation with a later collision succeeded\n' >&2
   exit 1
 fi
+test "$(readlink -- "${home}/.config/git/config")" = "${git_link_before}"
+test -f "${home}/.ssh/config"
+test "$(cat "${home}/.ssh/config")" = collision
 
-if HOME="${home}" "${test_root}/canonical/install.sh" --check missing 2>/dev/null; then
-  echo "missing package was accepted" >&2
-  exit 1
-fi
-
-echo "ok: sibling worktree transitions"
+printf 'ok: collision-complete sibling worktree transitions\n'

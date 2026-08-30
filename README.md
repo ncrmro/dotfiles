@@ -31,6 +31,15 @@ manually:
 ./install.sh --check themes
 ```
 
+Run the complete worktree-transition and fleet-package regression suite with:
+
+```shell
+./tests/run.sh
+```
+
+The suite uses disposable homes and a disposable package copy. It MUST NOT
+edit the tracked package checkout.
+
 Configuration in `packages/` should refer to dependencies by executable name,
 not by `/nix/store` path, so Nix can continue to own dependency provisioning.
 The `themes` package is the sparse, highest-precedence user catalog. It owns
