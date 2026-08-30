@@ -11,7 +11,7 @@ This is a personal dotfiles repository using GNU Stow for symlink-based configur
 ### Initial Setup
 ```bash
 # Install required tools
-brew install stow ripgrep jesseduffield/lazygit/lazygit rbenv vale pyenv
+brew install coreutils stow ripgrep jesseduffield/lazygit/lazygit rbenv vale pyenv
 
 # Run complete setup (installs Homebrew if needed)
 ./setup.sh

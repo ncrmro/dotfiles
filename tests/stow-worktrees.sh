@@ -12,11 +12,45 @@ git -C "${test_root}/canonical" worktree add -q -b test/sibling "${test_root}/si
 cp "${repo_dir}/install.sh" "${test_root}/canonical/install.sh"
 cp "${repo_dir}/install.sh" "${test_root}/sibling/install.sh"
 
+select_test_gnu_coreutil() {
+  local command_name="$1"
+  local candidate
+  local version
+
+  for candidate in "g${command_name}" "${command_name}"; do
+    command -v "${candidate}" >/dev/null 2>&1 || continue
+    version="$("${candidate}" --version 2>/dev/null || true)"
+    if [[ "${version}" == *"GNU coreutils"* ]]; then
+      command -v "${candidate}"
+      return 0
+    fi
+  done
+  return 1
+}
+
+test_realpath="$(select_test_gnu_coreutil realpath)"
+test_mv="$(select_test_gnu_coreutil mv)"
+coreutils_shim="${test_root}/coreutils-shim"
+coreutils_shim_log="${test_root}/coreutils-shim.log"
+mkdir -p "${coreutils_shim}"
+printf '%s\n' \
+  '#!/bin/sh' \
+  'printf "grealpath\n" >>"${COREUTILS_SHIM_LOG}"' \
+  "exec \"${test_realpath}\" \"\$@\"" \
+  >"${coreutils_shim}/grealpath"
+printf '%s\n' \
+  '#!/bin/sh' \
+  'printf "gmv\n" >>"${COREUTILS_SHIM_LOG}"' \
+  "exec \"${test_mv}\" \"\$@\"" \
+  >"${coreutils_shim}/gmv"
+chmod +x "${coreutils_shim}/grealpath" "${coreutils_shim}/gmv"
+
 assert_target() {
   local target="$1"
   local expected="$2"
 
-  test "$(realpath -m -- "${target}")" = "$(realpath -m -- "${expected}")"
+  test "$("${test_realpath}" -m -- "${target}")" = \
+    "$("${test_realpath}" -m -- "${expected}")"
 }
 
 snapshot_home() {
@@ -79,7 +113,12 @@ assert_target \
 before="$(readlink -- "${home}/.config/git/config")"
 HOME="${home}" "${test_root}/sibling/install.sh" --check git
 test "$(readlink -- "${home}/.config/git/config")" = "${before}"
-HOME="${home}" "${test_root}/sibling/install.sh" git
+COREUTILS_SHIM_LOG="${coreutils_shim_log}" \
+  PATH="${coreutils_shim}:${PATH}" \
+  HOME="${home}" \
+  "${test_root}/sibling/install.sh" git
+grep -Fxq grealpath "${coreutils_shim_log}"
+grep -Fxq gmv "${coreutils_shim_log}"
 assert_target \
   "${home}/.config/git/config" \
   "${test_root}/sibling/packages/git/.config/git/config"

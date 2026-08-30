@@ -8,6 +8,12 @@ for script in "${repo_dir}/install.sh" "${repo_dir}"/tests/*.sh; do
   bash -n "${script}"
 done
 
+test "$(grep -Ec '^trap .* EXIT$' "${repo_dir}/tests/fleet-packages.sh")" -eq 1
+if grep -Fq 'trap - EXIT' "${repo_dir}/tests/fleet-packages.sh"; then
+  printf 'Fleet tests disable their process-wide cleanup trap.\n' >&2
+  exit 1
+fi
+
 "${repo_dir}/tests/stow-worktrees.sh"
 "${repo_dir}/tests/fleet-packages.sh"
 

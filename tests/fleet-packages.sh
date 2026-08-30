@@ -3,7 +3,30 @@ set -euo pipefail
 
 repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 test_root="$(mktemp -d)"
-trap 'rm -rf "${test_root}"' EXIT
+socket_test_root=""
+socket_agent_pid=""
+callback_test_root=""
+
+cleanup_socket_test() {
+  if [[ -n "${socket_agent_pid}" ]]; then
+    kill "${socket_agent_pid}" 2>/dev/null || true
+    wait "${socket_agent_pid}" 2>/dev/null || true
+    socket_agent_pid=""
+  fi
+  if [[ -n "${socket_test_root}" ]]; then
+    rm -rf "${socket_test_root}"
+    socket_test_root=""
+  fi
+}
+
+cleanup_fleet_test() {
+  cleanup_socket_test
+  if [[ -n "${callback_test_root}" ]]; then
+    rm -rf "${callback_test_root}"
+  fi
+  rm -rf "${test_root}"
+}
+trap cleanup_fleet_test EXIT
 stow_root="${test_root}/dotfiles"
 mkdir -p "${stow_root}"
 cp "${repo_dir}/install.sh" "${stow_root}/install.sh"
@@ -109,6 +132,12 @@ uwsm_hyprland_env="${repo_dir}/packages/hyprland-common/.config/uwsm/env-hyprlan
 zsh_env="${repo_dir}/packages/zsh/.zshenv"
 zsh_rc="${repo_dir}/packages/zsh/.zshrc"
 ssh_config="${repo_dir}/packages/ssh/.ssh/config"
+mapfile -t startup_configs < <(
+  find "${repo_dir}/packages" -type f \
+    \( -path '*/.config/hypr/hyprland.lua' \
+    -o -path '*/.config/hypr/user.lua' \
+    -o -path '*/.config/hypr/host.lua' \) | sort
+)
 
 grep -Fxq 'shell-integration-features = ssh-env,ssh-terminfo' "${ghostty_config}"
 grep -Fq 'KEYSTONE_PROFILE_ROOT="$HOME/.nix-profile"' "${zsh_env}"
@@ -182,7 +211,7 @@ for graphical_command in \
   grep -Fq "app .. \"${graphical_command}\"" "${hyprland_lua}"
 done
 refute 'active Hyprland configuration must not invoke Waybar' \
-  -Ei '(^|[^[:alnum:]_])waybar([^[:alnum:]_]|$)' "${hyprland_lua}"
+  -Ei '(^|[^[:alnum:]_])waybar([^[:alnum:]_]|$)' "${startup_configs[@]}"
 
 ! grep -Eq 'systemctl --user import-environment|dbus-update-activation-environment|hyprctl dispatch exit' "${hyprland_lua}"
 ! grep -Eq 'WLR_RENDERER_ALLOW_SOFTWARE|HYPRCURSOR_' "${uwsm_env}"
@@ -195,15 +224,6 @@ grep -Fxq 'export HYPRCURSOR_THEME=Adwaita' "${uwsm_hyprland_env}"
 
 zsh -n "${zsh_env}"
 socket_test_root="$(mktemp -d)"
-socket_agent_pid=""
-cleanup_socket_test() {
-  if [[ -n "${socket_agent_pid}" ]]; then
-    kill "${socket_agent_pid}" 2>/dev/null || true
-    wait "${socket_agent_pid}" 2>/dev/null || true
-  fi
-  rm -rf "${socket_test_root}"
-}
-trap cleanup_socket_test EXIT
 mkdir -p "${socket_test_root}/gcr"
 
 SSH_AUTH_SOCK="${socket_test_root}/inherited" \
@@ -235,7 +255,6 @@ env -u SSH_AUTH_SOCK XDG_RUNTIME_DIR="${socket_test_root}" \
   _ "${zsh_env}" "${socket_test_root}"
 
 cleanup_socket_test
-trap - EXIT
 printf 'ok: SSH agent socket selection\n'
 
 test "$(find "${repo_dir}/packages/themes/.config/keystone/theme-catalogs/user" -name hyprland.lua -type f | wc -l)" -eq 2
@@ -247,12 +266,6 @@ for ecosystem_config in hypridle.conf hyprlock.conf hyprpaper.conf hyprsunset.co
 done
 printf 'ok: Hyprland Lua contract\n'
 
-mapfile -t startup_configs < <(
-  find "${repo_dir}/packages" -type f \
-    \( -path '*/.config/hypr/hyprland.lua' \
-    -o -path '*/.config/hypr/user.lua' \
-    -o -path '*/.config/hypr/host.lua' \) | sort
-)
 start_callbacks_are_safe() {
   local file
   for file in "$@"; do
@@ -360,7 +373,6 @@ start_callbacks_are_safe() {
 start_callbacks_are_safe "${startup_configs[@]}"
 
 callback_test_root="$(mktemp -d)"
-trap 'rm -rf "${callback_test_root}"' EXIT
 unsafe_fixture="${callback_test_root}/unsafe.lua"
 for unsafe_dispatcher in hl.exec_cmd hl.dsp.exec_cmd hl.exec_raw hl.dsp.exec_raw; do
   cat >"${unsafe_fixture}" <<LUA
@@ -399,7 +411,7 @@ end)
 LUA
 start_callbacks_are_safe "${safe_fixture}"
 rm -rf "${callback_test_root}"
-trap - EXIT
+callback_test_root=""
 printf 'ok: active startup callbacks are compositor-local\n'
 
 HYPRLAND_BIN="${HYPRLAND_BIN:-}" "${repo_dir}/tests/hyprland-lua.sh"

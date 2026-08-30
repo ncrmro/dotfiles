@@ -23,7 +23,9 @@ packages/
 ```
 
 Home Manager restows the selected packages during activation. To do the same
-manually:
+manually, install GNU Stow and GNU coreutils first. `install.sh` uses the
+native GNU `realpath` and `mv` on Linux and Homebrew's `grealpath` and `gmv`
+on macOS. It exits with an installation hint when those commands are absent.
 
 ```shell
 ./install.sh
@@ -151,10 +153,11 @@ For example, if you "stow" the nvim directory, Stow will link its contents into 
 
 Install [brew](https://brew.sh/) for both linux or mac.
 
-Ensure you have GNU Stow installed on your system. Ripgrep and Lazygit are needed later.
+Ensure you have GNU Stow and GNU coreutils installed on your system. Ripgrep
+and Lazygit are needed later.
 
 ```shell
-brew install stow ripgrep jesseduffield/lazygit/lazygit
+brew install coreutils stow ripgrep jesseduffield/lazygit/lazygit
 ```
 
 Then clone this repo somewhere. Then unstow a configuration. (Not it will error if any files would be overwritten)
