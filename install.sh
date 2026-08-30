@@ -70,8 +70,7 @@ fi
 
 retargetable_link() {
   local target="$1"
-  local expected="$2"
-  local expected_relative="$3"
+  local expected_relative="$2"
   local current
   local current_common_dir
   local current_relative
@@ -79,7 +78,6 @@ retargetable_link() {
 
   [[ -L "${target}" ]] || return 1
   current="$("${realpath_bin}" -m -- "${target}")"
-  [[ "${current}" != "${expected}" ]] || return 1
   [[ -e "${current}" ]] || return 1
 
   current_repo="$(
@@ -235,6 +233,9 @@ for ((i = 0; i < ${#sources[@]}; i++)); do
   target="${targets[i]}"
   expected_relative="${expected_relatives[i]}"
   expected="$("${realpath_bin}" -m -- "${source}")"
+  expected_link="$(
+    "${realpath_bin}" -m --relative-to="$(dirname "${target}")" "${expected}"
+  )"
 
   if ! validate_parent_chain "${target}"; then
     broken=1
@@ -242,8 +243,9 @@ for ((i = 0; i < ${#sources[@]}; i++)); do
   fi
   if [[ -L "${target}" ]]; then
     resolved="$("${realpath_bin}" -m -- "${target}")"
-    if [[ "${resolved}" != "${expected}" ]]; then
-      if retargetable_link "${target}" "${expected}" "${expected_relative}"; then
+    current_link="$(readlink "${target}")"
+    if [[ "${current_link}" != "${expected_link}" ]]; then
+      if retargetable_link "${target}" "${expected_relative}"; then
         retargets+=("${target}" "${expected}")
       else
         printf 'Unexpected link target: %s -> %s (expected %s)\n' \
@@ -265,6 +267,13 @@ if [[ "${check}" == true ]]; then
   # This explicit walk is the authoritative collision check. GNU Stow's
   # simulation rejects a safe sibling-worktree transition based on the link's
   # lexical spelling even when both sources have identical repository paths.
+  for ((i = 0; i < ${#retargets[@]}; i += 2)); do
+    relative="$(
+      "${realpath_bin}" -m \
+        --relative-to="$(dirname "${retargets[i]}")" "${retargets[i + 1]}"
+    )"
+    printf 'Would retarget: %s -> %s\n' "${retargets[i]}" "${relative}"
+  done
   exit 0
 fi
 

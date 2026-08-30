@@ -243,6 +243,24 @@ if [[ "${#startup_configs[@]}" -ne 10 ]]; then
     "${#startup_configs[@]}" >&2
   exit 1
 fi
+waybar_guard_configs=()
+while IFS= read -r waybar_guard_config; do
+  waybar_guard_configs+=("${waybar_guard_config}")
+done < <(
+  find "${repo_dir}/packages" -type f \
+    \( -path '*/.config/hypr/*.lua' \
+    -o -path '*/.config/hypr/*.conf' \
+    -o -path '*/.config/uwsm/env' \
+    -o -path '*/.config/uwsm/env-hyprland' \
+    -o -path '*/.config/omarchy/shell.json' \
+    -o -path '*/.config/keystone/theme-catalogs/user/*/hyprland.lua' \) \
+    -print | sort
+)
+if [[ "${#waybar_guard_configs[@]}" -ne 18 ]]; then
+  printf 'Expected 18 active desktop configuration files. Found %d.\n' \
+    "${#waybar_guard_configs[@]}" >&2
+  exit 1
+fi
 
 grep -Fxq 'shell-integration-features = ssh-env,ssh-terminfo' "${ghostty_config}"
 grep -Fq 'KEYSTONE_PROFILE_ROOT="$HOME/.nix-profile"' "${zsh_env}"
@@ -284,6 +302,7 @@ grep -Fq 'local theme, load_error = loadfile(theme_path)' "${hyprland_lua}"
 grep -Fq 'local ok, runtime_error = pcall(theme)' "${hyprland_lua}"
 grep -Fq 'local ok, err = pcall(require, name)' "${hyprland_lua}"
 grep -Fq 'load_module("user")' "${hyprland_lua}"
+grep -Fq 'load_module("monitors")' "${hyprland_lua}"
 grep -Fq 'load_module("host")' "${hyprland_lua}"
 grep -Fq 'local app = "uwsm app -- "' "${hyprland_lua}"
 grep -Fq 'hl.bind(mod .. " + P", hl.dsp.window.pseudo())' "${hyprland_lua}"
@@ -304,7 +323,7 @@ for graphical_command in \
   grep -Fq "app .. \"${graphical_command}\"" "${hyprland_lua}"
 done
 refute 'active Hyprland configuration must not invoke Waybar' \
-  -Ei '(^|[^[:alnum:]_])waybar([^[:alnum:]_]|$)' "${startup_configs[@]}"
+  -Ei '(^|[^[:alnum:]_])waybar([^[:alnum:]_]|$)' "${waybar_guard_configs[@]}"
 
 refute 'Hyprland config must not import or tear down the session environment' \
   -E 'systemctl --user import-environment|dbus-update-activation-environment|hyprctl dispatch exit' \

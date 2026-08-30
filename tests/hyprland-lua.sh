@@ -34,6 +34,15 @@ refute() {
   return 0
 }
 
+printf 'forbidden marker\n' >"${test_root}/refute-fixture"
+if refute fixture -F 'forbidden marker' "${test_root}/refute-fixture" \
+  >/dev/null 2>&1; then
+  printf 'Hyprland content guard accepted a matching fixture.\n' >&2
+  exit 1
+fi
+rm "${test_root}/refute-fixture"
+printf 'ok: Hyprland content guard rejects a live fixture\n'
+
 # GNU env treats a Nix path with +date= as an environment assignment.
 ln -s "${hyprland_bin}" "${test_root}/Hyprland"
 verify_hyprland_bin="${test_root}/Hyprland"

@@ -90,6 +90,18 @@ snapshot_home() {
   )
 }
 
+snapshot_fixture="${test_root}/snapshot-fixture"
+mkdir -p "${snapshot_fixture}"
+snapshot_before="$(snapshot_home "${snapshot_fixture}")"
+printf 'mutation detector fixture\n' >"${snapshot_fixture}/changed"
+snapshot_after="$(snapshot_home "${snapshot_fixture}")"
+if [[ "${snapshot_after}" == "${snapshot_before}" ]]; then
+  printf 'snapshot_home did not detect a fixture mutation\n' >&2
+  exit 1
+fi
+rm -rf "${snapshot_fixture}"
+printf 'ok: HOME mutation snapshot detects live changes\n'
+
 assert_check_rejected() {
   local home="$1"
   local installer="$2"
@@ -119,13 +131,51 @@ new_home() {
   printf '%s\n' "${home}"
 }
 
-home="$(new_home transitions)"
+transitions_home="$(new_home transitions)"
+home="${transitions_home}"
 HOME="${home}" "${test_root}/canonical/install.sh" git
 assert_target \
   "${home}/.config/git/config" \
   "${test_root}/canonical/packages/git/.config/git/config"
 
+# A link that resolves correctly but has absolute spelling still needs an
+# explicit transition before Stow can accept it.
+home="$(new_home absolute-link)"
+mkdir -p "${home}/.config/git"
+absolute_source="${test_root}/canonical/packages/git/.config/git/config"
+ln -s "${absolute_source}" "${home}/.config/git/config"
+absolute_expected_link="$(
+  "${test_realpath}" -m --relative-to="${home}/.config/git" "${absolute_source}"
+)"
+absolute_check_output="$(
+  HOME="${home}" "${test_root}/canonical/install.sh" --check git
+)"
+grep -Fxq \
+  "Would retarget: ${home}/.config/git/config -> ${absolute_expected_link}" \
+  <<<"${absolute_check_output}"
+test "$(readlink "${home}/.config/git/config")" = "${absolute_source}"
+HOME="${home}" "${test_root}/canonical/install.sh" git
+test "$(readlink "${home}/.config/git/config")" = "${absolute_expected_link}"
+assert_target "${home}/.config/git/config" "${absolute_source}"
+
+# A late collision must prevent that lexical repair from happening at all.
+home="$(new_home absolute-link-late-collision)"
+mkdir -p "${home}/.config/git" "${home}/.ssh"
+ln -s "${absolute_source}" "${home}/.config/git/config"
+printf 'collision\n' >"${home}/.ssh/config"
+absolute_before="$(readlink "${home}/.config/git/config")"
+assert_check_rejected \
+  "${home}" "${test_root}/canonical/install.sh" \
+  "late collision after absolute owned link" git ssh
+if HOME="${home}" "${test_root}/canonical/install.sh" git ssh >/dev/null 2>&1; then
+  printf 'installation with absolute link and late collision succeeded\n' >&2
+  exit 1
+fi
+test "$(readlink "${home}/.config/git/config")" = "${absolute_before}"
+printf 'ok: absolute owned links are planned without partial mutation\n'
+
 # canonical -> worktree: check is non-mutating, install atomically retargets.
+home="${transitions_home}"
 before="$(readlink "${home}/.config/git/config")"
 HOME="${home}" "${test_root}/sibling/install.sh" --check git
 test "$(readlink "${home}/.config/git/config")" = "${before}"
@@ -229,6 +279,28 @@ cp -a "${test_root}/canonical/packages/git" \
   "${test_root}/canonical/packages/duplicate-git"
 assert_check_rejected \
   "${home}" "${test_root}/canonical/install.sh" "duplicate target" git duplicate-git
+
+# Cross-package leaf/parent overlap reaches the installer's dedicated branch.
+mkdir -p \
+  "${test_root}/canonical/packages/overlap-leaf/.config" \
+  "${test_root}/canonical/packages/overlap-child/.config/overlap"
+printf 'leaf\n' \
+  >"${test_root}/canonical/packages/overlap-leaf/.config/overlap"
+printf 'child\n' \
+  >"${test_root}/canonical/packages/overlap-child/.config/overlap/child"
+home="$(new_home planned-leaf-parent-overlap)"
+if overlap_output="$(
+  HOME="${home}" "${test_root}/canonical/install.sh" --check \
+    overlap-leaf overlap-child 2>&1
+)"; then
+  printf 'planned leaf/parent overlap was accepted\n' >&2
+  exit 1
+fi
+grep -Fq \
+  "Target is also required as a parent directory: ${home}/.config/overlap" \
+  <<<"${overlap_output}"
+test -z "$(snapshot_home "${home}")"
+printf 'ok: planned leaf/parent overlap reaches dedicated rejection\n'
 
 # A later collision prevents an earlier valid worktree link from retargeting.
 home="$(new_home complete-pass)"
