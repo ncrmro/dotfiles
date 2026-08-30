@@ -35,6 +35,25 @@ if ! mv_bin="$(select_gnu_coreutil mv)"; then
   exit 1
 fi
 home_dir="$("${realpath_bin}" -m -- "${HOME}")"
+retarget_temporary=""
+
+cleanup_retarget_temporary() {
+  if [[ -n "${retarget_temporary}" && -L "${retarget_temporary}" ]]; then
+    rm -f "${retarget_temporary}"
+  fi
+  retarget_temporary=""
+}
+
+exit_for_signal() {
+  local status="$1"
+
+  exit "${status}"
+}
+
+trap cleanup_retarget_temporary EXIT
+trap 'exit_for_signal 129' HUP
+trap 'exit_for_signal 130' INT
+trap 'exit_for_signal 143' TERM
 
 check=false
 if [[ "${1:-}" == "--check" ]]; then
@@ -95,8 +114,18 @@ retarget_link() {
     "${realpath_bin}" -m --relative-to="$(dirname "${target}")" "${expected}"
   )"
   temporary="${target}.dotfiles-retarget.$$"
+  if [[ -e "${temporary}" || -L "${temporary}" ]]; then
+    printf 'Temporary retarget path already exists: %s\n' "${temporary}" >&2
+    return 1
+  fi
+  retarget_temporary="${temporary}"
   ln -s "${relative}" "${temporary}"
-  "${mv_bin}" -Tf -- "${temporary}" "${target}"
+  if ! "${mv_bin}" -Tf -- "${temporary}" "${target}"; then
+    cleanup_retarget_temporary
+    return 1
+  fi
+  retarget_temporary=""
+  return 0
 }
 
 planned_leaf_target() {

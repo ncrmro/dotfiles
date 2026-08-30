@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+# Requirements: Bash 3.2+, Git, GNU Stow, GNU coreutils, Zsh, and ssh-agent.
+# By default the Hyprland suite also needs Nix plus network access or populated
+# store paths for pinned Hyprland and Lua 5.4 builds. Set both HYPRLAND_BIN and
+# LUA_BIN to compatible local executables to skip those builds; HYPRLAND_BIN
+# must still report the pinned version and revision.
 set -euo pipefail
 
 repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
@@ -13,16 +18,17 @@ if grep -Fq 'trap - EXIT' "${repo_dir}/tests/fleet-packages.sh"; then
   printf 'Fleet tests disable their process-wide cleanup trap.\n' >&2
   exit 1
 fi
-if grep -Eq '^[[:space:]]*![[:space:]]' "${repo_dir}/tests/fleet-packages.sh"; then
-  printf 'Fleet tests contain a bare negated assertion.\n' >&2
+if grep -En '^[[:space:]]*![[:space:]]' "${repo_dir}"/tests/*.sh; then
+  printf 'Tests contain a bare negated assertion.\n' >&2
   exit 1
 fi
 if grep -Eq 'match\([^)]*,[^)]*,' "${repo_dir}/tests/fleet-packages.sh"; then
   printf 'Fleet tests contain a non-portable three-argument awk match.\n' >&2
   exit 1
 fi
-if grep -Eq 'sha256sum|sort -z|-print0' "${repo_dir}/tests/stow-worktrees.sh"; then
-  printf 'Worktree snapshots depend on GNU-only traversal or hashing.\n' >&2
+if grep -En 'm[a]pfile|read[a]rray|-p[r]intf|[(]realp[a]th[[:space:]]|sha256s[u]m|sort -[z]|-print[0]' \
+  "${repo_dir}"/tests/*.sh; then
+  printf 'Tests contain an unselected GNU command or a Bash-newer-than-3.2 primitive.\n' >&2
   exit 1
 fi
 

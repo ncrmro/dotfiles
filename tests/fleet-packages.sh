@@ -74,6 +74,28 @@ refute() {
   return 0
 }
 
+select_test_gnu_coreutil() {
+  local command_name="$1"
+  local candidate
+  local version
+
+  for candidate in "g${command_name}" "${command_name}"; do
+    command -v "${candidate}" >/dev/null 2>&1 || continue
+    version="$("${candidate}" --version 2>/dev/null || true)"
+    if [[ "${version}" == *"GNU coreutils"* ]]; then
+      command -v "${candidate}"
+      return 0
+    fi
+  done
+  printf 'GNU coreutils %s is required for fleet tests. On macOS, run: brew install coreutils\n' \
+    "${command_name}" >&2
+  return 1
+}
+
+if ! test_realpath="$(select_test_gnu_coreutil realpath)"; then
+  exit 1
+fi
+
 guard_fixture="${test_root}/negative-guard-fixture"
 mkdir -p "${guard_fixture}"
 printf 'forbidden marker\n' >"${guard_fixture}/present"
@@ -114,7 +136,7 @@ seed_obsolete_stow_link() {
   local source="$1"
   local target="$2"
 
-  ln -s "$(realpath -m --relative-to="$(dirname "${target}")" "${source}")" \
+  ln -s "$("${test_realpath}" -m --relative-to="$(dirname "${target}")" "${source}")" \
     "${target}"
 }
 
@@ -178,7 +200,10 @@ for composition in "${compositions[@]}"; do
 done
 
 themes_dir="${repo_dir}/packages/themes/.config/keystone/theme-catalogs/user"
-mapfile -t theme_dirs < <(find "${themes_dir}" -mindepth 1 -maxdepth 1 -type d | sort)
+theme_dirs=()
+while IFS= read -r theme_dir; do
+  theme_dirs+=("${theme_dir}")
+done < <(find "${themes_dir}" -mindepth 1 -maxdepth 1 -type d -print | sort)
 test "${#theme_dirs[@]}" -eq 15
 assert_find_empty 'user themes contain retired zellij.conf files' \
   "${themes_dir}" -name zellij.conf -type f
@@ -201,12 +226,23 @@ uwsm_hyprland_env="${repo_dir}/packages/hyprland-common/.config/uwsm/env-hyprlan
 zsh_env="${repo_dir}/packages/zsh/.zshenv"
 zsh_rc="${repo_dir}/packages/zsh/.zshrc"
 ssh_config="${repo_dir}/packages/ssh/.ssh/config"
-mapfile -t startup_configs < <(
+startup_configs=()
+while IFS= read -r startup_config; do
+  startup_configs+=("${startup_config}")
+done < <(
   find "${repo_dir}/packages" -type f \
     \( -path '*/.config/hypr/hyprland.lua' \
     -o -path '*/.config/hypr/user.lua' \
-    -o -path '*/.config/hypr/host.lua' \) | sort
+    -o -path '*/.config/hypr/host.lua' \
+    -o -path '*/.config/hypr/monitors.lua' \
+    -o -path '*/.config/keystone/theme-catalogs/user/*/hyprland.lua' \) \
+    -print | sort
 )
+if [[ "${#startup_configs[@]}" -ne 10 ]]; then
+  printf 'Expected 10 active Hyprland Lua configs. Found %d.\n' \
+    "${#startup_configs[@]}" >&2
+  exit 1
+fi
 
 grep -Fxq 'shell-integration-features = ssh-env,ssh-terminfo' "${ghostty_config}"
 grep -Fq 'KEYSTONE_PROFILE_ROOT="$HOME/.nix-profile"' "${zsh_env}"

@@ -25,11 +25,17 @@ select_test_gnu_coreutil() {
       return 0
     fi
   done
+  printf 'GNU coreutils %s is required for worktree tests. On macOS, run: brew install coreutils\n' \
+    "${command_name}" >&2
   return 1
 }
 
-test_realpath="$(select_test_gnu_coreutil realpath)"
-test_mv="$(select_test_gnu_coreutil mv)"
+if ! test_realpath="$(select_test_gnu_coreutil realpath)"; then
+  exit 1
+fi
+if ! test_mv="$(select_test_gnu_coreutil mv)"; then
+  exit 1
+fi
 coreutils_shim="${test_root}/coreutils-shim"
 coreutils_shim_log="${test_root}/coreutils-shim.log"
 mkdir -p "${coreutils_shim}"
@@ -48,6 +54,7 @@ printf '%s\n' \
   '  printf gmv >>"${COREUTILS_SHIM_LOG}"' \
   '  for argument do printf "\t%s" "${argument}" >>"${COREUTILS_SHIM_LOG}"; done' \
   '  printf "\n" >>"${COREUTILS_SHIM_LOG}"' \
+  '  if [ "${COREUTILS_SHIM_FAIL_MV:-0}" = 1 ]; then exit 42; fi' \
   'fi' \
   "exec \"${test_mv}\" \"\$@\"" \
   >"${coreutils_shim}/gmv"
@@ -133,6 +140,23 @@ grep -Eq $'^gmv\t-Tf\t--\t.*[.]dotfiles-retarget[.][0-9]+\t.*/[.]config/git/conf
 assert_target \
   "${home}/.config/git/config" \
   "${test_root}/sibling/packages/git/.config/git/config"
+
+# An injected atomic-move failure preserves the link and removes its temp link.
+failed_target_before="$(readlink "${home}/.config/git/config")"
+if COREUTILS_SHIM_FAIL_MV=1 \
+  COREUTILS_SHIM_LOG="${coreutils_shim_log}" \
+  PATH="${coreutils_shim}:${PATH}" \
+  HOME="${home}" \
+  "${test_root}/canonical/install.sh" git >/dev/null 2>&1; then
+  printf 'injected GNU mv failure was accepted\n' >&2
+  exit 1
+fi
+test "$(readlink "${home}/.config/git/config")" = "${failed_target_before}"
+if find "${home}/.config/git" -name 'config.dotfiles-retarget.*' -print | grep -q .; then
+  printf 'failed retarget left a temporary symlink\n' >&2
+  exit 1
+fi
+printf 'ok: injected GNU mv failure preserves target without temp litter\n'
 
 # Unchanged links are accepted, then worktree -> canonical is symmetric.
 HOME="${home}" "${test_root}/sibling/install.sh" --check git

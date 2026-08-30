@@ -14,6 +14,26 @@ else
 fi
 test_root="$(mktemp -d)"
 trap 'rm -rf "${test_root}"' EXIT
+
+refute() {
+  local why="$1"
+  local status
+  shift
+
+  if grep "$@" >/dev/null; then
+    printf 'FAIL: %s\n' "${why}" >&2
+    grep -n "$@" >&2 || true
+    return 1
+  else
+    status=$?
+  fi
+  if [[ "${status}" -ne 1 ]]; then
+    printf 'FAIL: grep failed while checking %s\n' "${why}" >&2
+    return 1
+  fi
+  return 0
+}
+
 # GNU env treats a Nix path with +date= as an environment assignment.
 ln -s "${hyprland_bin}" "${test_root}/Hyprland"
 verify_hyprland_bin="${test_root}/Hyprland"
@@ -46,9 +66,12 @@ verify_config() {
     --config "${test_home}/.config/hypr/hyprland.lua" 2>&1
 }
 
-mapfile -t theme_dirs < <(
+theme_dirs=()
+while IFS= read -r theme_file; do
+  theme_dirs+=("$(dirname "${theme_file}")")
+done < <(
   find "${repo_dir}/packages/themes/.config/keystone/theme-catalogs/user" \
-    -mindepth 2 -maxdepth 2 -name hyprland.lua -type f -printf '%h\n' | sort
+    -mindepth 2 -maxdepth 2 -name hyprland.lua -type f -print | sort
 )
 host_packages=(
   hyprland-laptop
@@ -112,7 +135,8 @@ if host_output="$(verify_config "${test_home}" "${runtime_dir}")"; then
 fi
 grep -Fq 'require("host"):' <<<"${host_output}"
 grep -Fq 'broken host' <<<"${host_output}"
-! grep -Fq 'config ok' <<<"${host_output}"
+refute 'invalid host output must not report a valid config' \
+  -F 'config ok' <<<"${host_output}"
 printf 'ok: invalid host is a diagnosed config error\n'
 
 close_binding="${test_root}/chrome-hold-close.lua"
@@ -123,8 +147,10 @@ awk '
 ' "${repo_dir}/packages/hyprland-common/.config/hypr/hyprland.lua" \
   >"${close_binding}"
 test "$(grep -Ec '^  \["[^"]+"\] = true,$' "${close_binding}")" -eq 6
-! grep -Fq 'hl.bind(mod .. " + W", hl.dsp.window.close())' \
+refute 'protected browser close must not use the direct close binding' \
+  -F 'hl.bind(mod .. " + W", hl.dsp.window.close())' \
   "${repo_dir}/packages/hyprland-common/.config/hypr/hyprland.lua"
-! grep -Eq 'walker|mako|notify-send|exec\(|os\.execute|io\.popen' \
+refute 'protected browser close callback must stay process-free' \
+  -E 'walker|mako|notify-send|exec\(|os\.execute|io\.popen' \
   "${close_binding}"
 "${lua_bin}" "${repo_dir}/tests/hyprland-close.lua" "${close_binding}"
