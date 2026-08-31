@@ -438,6 +438,7 @@ done
 printf 'ok: Hyprland Lua contract\n'
 
 start_callbacks_are_safe() {
+  local callback_status
   local file
   local unsafe_aliases
   for file in "$@"; do
@@ -584,31 +585,100 @@ start_callbacks_are_safe() {
     ' "${file}")"; then
       return 1
     fi
+    callback_status=0
     awk -v unsafe_aliases="${unsafe_aliases}" '
       # Contract: hyprland.start callbacks may only perform compositor-local
       # typed dispatch and configuration work. They must not launch a shell,
       # process, GUI, or long-lived service, directly or through a local
       # alias of a Hyprland command dispatcher.
-      function unsafe(callback, normalized, remaining, assignment, alias, pattern, alias_i) {
-        normalized = callback
+      function normalized_context(text, normalized) {
+        normalized = text
         gsub(/[[:space:]]+/, " ", normalized)
-        if (normalized ~ /hl[.]exec_(cmd|raw)[[:space:]]*\(/ \
-          || normalized ~ /hl[.]dsp[.]exec_(cmd|raw)[[:space:]]*\(/ \
-          || normalized ~ /os[.]execute[[:space:]]*\(/ \
-          || normalized ~ /io[.]popen[[:space:]]*\(/ \
-          || normalized ~ /uwsm[[:space:]]+app/) {
+        sub(/^ /, "", normalized)
+        sub(/ $/, "", normalized)
+        return normalized
+      }
+
+      function has_identifier(text, identifier, pattern) {
+        pattern = "(^|[^[:alnum:]_])" identifier "([^[:alnum:]_]|$)"
+        return text ~ pattern
+      }
+
+      function source_span(first, last) {
+        if (first == last) {
+          return FILENAME ":" first
+        }
+        return FILENAME ":" first "-" last
+      }
+
+      function identifier_context(text, output, quote, escaped, i, character) {
+        output = ""
+        quote = ""
+        escaped = 0
+        for (i = 1; i <= length(text); i++) {
+          character = substr(text, i, 1)
+          if (quote != "") {
+            output = output " "
+            if (escaped) {
+              escaped = 0
+            } else if (character == "\\") {
+              escaped = 1
+            } else if (character == quote) {
+              quote = ""
+            }
+          } else if (character == "\"" || character == "\047") {
+            quote = character
+            output = output " "
+          } else {
+            output = output character
+          }
+        }
+        return normalized_context(output)
+      }
+
+      function unsafe(callback, normalized, identifiers, remaining, assignment, alias, pattern, alias_i) {
+        normalized = normalized_context(callback)
+        identifiers = identifier_context(callback)
+        captured_callback = normalized
+        if (has_identifier(identifiers, "hl[.]dsp[.]exec_cmd")) {
+          unsafe_reason = "forbidden builtin identifier: hl.dsp.exec_cmd"
+          return 1
+        }
+        if (has_identifier(identifiers, "hl[.]dsp[.]exec_raw")) {
+          unsafe_reason = "forbidden builtin identifier: hl.dsp.exec_raw"
+          return 1
+        }
+        if (has_identifier(identifiers, "hl[.]exec_cmd")) {
+          unsafe_reason = "forbidden builtin identifier: hl.exec_cmd"
+          return 1
+        }
+        if (has_identifier(identifiers, "hl[.]exec_raw")) {
+          unsafe_reason = "forbidden builtin identifier: hl.exec_raw"
+          return 1
+        }
+        if (has_identifier(identifiers, "os[.]execute")) {
+          unsafe_reason = "forbidden builtin identifier: os.execute"
+          return 1
+        }
+        if (has_identifier(identifiers, "io[.]popen")) {
+          unsafe_reason = "forbidden builtin identifier: io.popen"
+          return 1
+        }
+        if (normalized ~ /(^|[^[:alnum:]_])uwsm[[:space:]]+app([^[:alnum:]_]|$)/) {
+          unsafe_reason = "forbidden command context: uwsm app"
           return 1
         }
 
         for (alias_i = 1; alias_i <= alias_count; alias_i++) {
           alias = file_aliases[alias_i]
           if (alias != "" \
-            && normalized ~ ("(^|[^[:alnum:]_])" alias "([^[:alnum:]_]|$)")) {
+            && identifiers ~ ("(^|[^[:alnum:]_])" alias "([^[:alnum:]_]|$)")) {
+            unsafe_reason = "forbidden file-scope dispatcher alias: " alias
             return 1
           }
         }
 
-        remaining = normalized
+        remaining = identifiers
         pattern = "(^|[^[:alnum:]_])((local[[:space:]]+)?([[:alpha:]_][[:alnum:]_]*))[[:space:]]*=[[:space:]]*hl[.](dsp[.])?exec_(cmd|raw)([^[:alnum:]_]|$)"
         while (match(remaining, pattern)) {
           assignment = substr(remaining, RSTART, RLENGTH)
@@ -616,7 +686,8 @@ start_callbacks_are_safe() {
           sub(/^local[[:space:]]+/, "", assignment)
           sub(/[[:space:]]*=.*/, "", assignment)
           alias = assignment
-          if (normalized ~ ("(^|[^[:alnum:]_])" alias "[[:space:]]*[(]")) {
+          if (identifiers ~ ("(^|[^[:alnum:]_])" alias "[[:space:]]*[(]")) {
+            unsafe_reason = "forbidden callback-local dispatcher alias: " alias
             return 1
           }
           remaining = substr(remaining, RSTART + RLENGTH)
@@ -696,6 +767,7 @@ start_callbacks_are_safe() {
           active = 1
           depth = 0
           callback = ""
+          callback_start = FNR
           code = substr(code, hook_at)
         }
 
@@ -725,6 +797,10 @@ start_callbacks_are_safe() {
             depth--
             if (depth == 0) {
               if (unsafe(callback)) {
+                active = 0
+                printf "Unsafe hyprland.start callback at %s: %s\nCaptured callback: %s\n", \
+                  source_span(callback_start, FNR), unsafe_reason, captured_callback \
+                  > "/dev/stderr"
                 exit 1
               }
               active = 0
@@ -738,10 +814,16 @@ start_callbacks_are_safe() {
 
       END {
         if (active) {
+          printf "Unclosed hyprland.start callback at %s\nCaptured callback: %s\n", \
+            source_span(callback_start, FNR), normalized_context(callback) \
+            > "/dev/stderr"
           exit 2
         }
       }
-    ' "${file}" || return 1
+    ' "${file}" || callback_status="$?"
+    if [[ "${callback_status}" -ne 0 ]]; then
+      return "${callback_status}"
+    fi
   done
 }
 
@@ -749,6 +831,48 @@ start_callbacks_are_safe "${startup_configs[@]}"
 
 callback_test_root="$(mktemp -d "${TMPDIR:-/tmp}/dotfiles-start-callback.XXXXXXXXXX")"
 unsafe_fixture="${callback_test_root}/unsafe.lua"
+
+assert_callback_rejected() {
+  local expected_status="$1"
+  local expected_output="$2"
+  local why="$3"
+  local actual_output
+  local actual_status
+
+  if actual_output="$(start_callbacks_are_safe "${unsafe_fixture}" 2>&1)"; then
+    printf 'Startup callback guard accepted %s.\n' "${why}" >&2
+    exit 1
+  else
+    actual_status="$?"
+  fi
+  if [[ "${actual_status}" -ne "${expected_status}" ]]; then
+    printf '%s returned status %s instead of %s.\n' \
+      "${why}" "${actual_status}" "${expected_status}" >&2
+    exit 1
+  fi
+  if [[ "${actual_output}" != "${expected_output}" ]]; then
+    printf '%s lacked its exact diagnostic:\nExpected:\n%s\nActual:\n%s\n' \
+      "${why}" "${expected_output}" "${actual_output}" >&2
+    exit 1
+  fi
+}
+
+for unsafe_builtin in \
+  hl.exec_cmd \
+  hl.dsp.exec_cmd \
+  hl.exec_raw \
+  hl.dsp.exec_raw \
+  os.execute \
+  io.popen; do
+  printf 'hl.on("hyprland.start", %s)\n' "${unsafe_builtin}" >"${unsafe_fixture}"
+  expected_callback="hl.on(\"hyprland.start\", ${unsafe_builtin})"
+  expected_diagnostic="$(printf \
+    'Unsafe hyprland.start callback at %s:1: forbidden builtin identifier: %s\nCaptured callback: %s' \
+    "${unsafe_fixture}" "${unsafe_builtin}" "${expected_callback}")"
+  assert_callback_rejected \
+    1 "${expected_diagnostic}" "bare builtin callback reference ${unsafe_builtin}"
+done
+
 for unsafe_dispatcher in hl.exec_cmd hl.dsp.exec_cmd hl.exec_raw hl.dsp.exec_raw; do
   cat >"${unsafe_fixture}" <<LUA
 hl.on("hyprland.start", function()
@@ -869,11 +993,32 @@ for unsafe_call in \
   'local command = "uwsm app -- unsafe-example"'; do
   printf 'hl.on("hyprland.start", function()\n  %s\nend)\n' "${unsafe_call}" \
     >"${unsafe_fixture}"
-  if start_callbacks_are_safe "${unsafe_fixture}"; then
-    printf 'Startup callback guard accepted unsafe call: %s\n' "${unsafe_call}" >&2
-    exit 1
-  fi
+  case "${unsafe_call}" in
+    'local command = "uwsm app -- unsafe-example"')
+      unsafe_reason='forbidden command context: uwsm app'
+      ;;
+    *)
+      unsafe_identifier="${unsafe_call%%(*}"
+      unsafe_reason="forbidden builtin identifier: ${unsafe_identifier}"
+      ;;
+  esac
+  expected_callback="hl.on(\"hyprland.start\", function() ${unsafe_call} end)"
+  expected_diagnostic="$(printf \
+    'Unsafe hyprland.start callback at %s:1-3: %s\nCaptured callback: %s' \
+    "${unsafe_fixture}" "${unsafe_reason}" "${expected_callback}")"
+  assert_callback_rejected \
+    1 "${expected_diagnostic}" "multiline unsafe callback ${unsafe_call}"
 done
+
+cat >"${unsafe_fixture}" <<'LUA'
+hl.on("hyprland.start", function()
+  hl.dispatch(hl.dsp.focus({ workspace = 2 }))
+LUA
+expected_diagnostic="$(printf \
+  'Unclosed hyprland.start callback at %s:1-2\nCaptured callback: hl.on("hyprland.start", function() hl.dispatch(hl.dsp.focus({ workspace = 2 }))' \
+  "${unsafe_fixture}")"
+assert_callback_rejected \
+  2 "${expected_diagnostic}" 'unterminated multiline callback'
 
 safe_fixture="${callback_test_root}/safe.lua"
 cat >"${safe_fixture}" <<'LUA'
@@ -881,6 +1026,16 @@ local explanation = true -- hl.on("hyprland.start", function() hl.exec_cmd("docs
 local example = 'hl.on("hyprland.start", function() hl.exec_cmd("docs") end)'
 local bracket_example = "[=[ordinary quoted text]=]"
 hl.on("hyprland.start", function()
+  local lookalikes = {
+    hl.exec_cmd_safe,
+    hl.dsp.exec_cmd_safe,
+    hl.exec_raw_safe,
+    hl.dsp.exec_raw_safe,
+    os.execute_safe,
+    io.popen_safe,
+    fake_hl.exec_cmd,
+    "hl.exec_cmd",
+  }
   hl.dispatch(hl.dsp.focus({ workspace = 2 }))
 end)
 LUA
