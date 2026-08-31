@@ -441,7 +441,7 @@ start_callbacks_are_safe() {
   local file
   local unsafe_aliases
   for file in "$@"; do
-    unsafe_aliases="$(awk '
+    if ! unsafe_aliases="$(awk '
       function count_word(text, word, count, remaining, pattern) {
         count = 0
         remaining = text
@@ -453,12 +453,37 @@ start_callbacks_are_safe() {
         return count
       }
 
+      function structural_code(text, output, quote, escaped, i, character, following) {
+        output = ""
+        quote = ""
+        escaped = 0
+        for (i = 1; i <= length(text); i++) {
+          character = substr(text, i, 1)
+          following = substr(text, i + 1, 1)
+          if (quote != "") {
+            output = output " "
+            if (escaped) {
+              escaped = 0
+            } else if (character == "\\") {
+              escaped = 1
+            } else if (character == quote) {
+              quote = ""
+            }
+          } else if (character == "\"" || character == "\047") {
+            quote = character
+            output = output " "
+          } else if (character == "-" && following == "-") {
+            break
+          } else {
+            output = output character
+          }
+        }
+        return output
+      }
+
       {
         code = $0
-        structural = code
-        sub(/--.*/, "", structural)
-        gsub(/"([^"\\]|\\.)*"/, "", structural)
-        gsub(/\047([^\047\\]|\\.)*\047/, "", structural)
+        structural = structural_code(code)
         trimmed = code
         sub(/^[[:space:]]+/, "", trimmed)
 
@@ -482,7 +507,7 @@ start_callbacks_are_safe() {
         }
 
         if (function_alias != "") {
-          if (code ~ /hl[.](dsp[.])?exec_(cmd|raw)[[:space:]]*[(]/) {
+          if (structural ~ /hl[.](dsp[.])?exec_(cmd|raw)[[:space:]]*[(]/) {
             function_unsafe = 1
           }
           # Lua blocks close only on standalone end/until tokens. Counting
@@ -511,7 +536,17 @@ start_callbacks_are_safe() {
           print assignment
         }
       }
-    ' "${file}")"
+
+      END {
+        if (function_alias != "") {
+          printf "Unclosed file-scope function while checking startup callbacks: %s\n", \
+            function_alias > "/dev/stderr"
+          exit 2
+        }
+      }
+    ' "${file}")"; then
+      return 1
+    fi
     awk -v unsafe_aliases="${unsafe_aliases}" '
       # Contract: hyprland.start callbacks may only perform compositor-local
       # typed dispatch and configuration work. They must not launch a shell,
@@ -552,6 +587,59 @@ start_callbacks_are_safe() {
         return 0
       }
 
+      function code_before_comment(text, output, quote, escaped, i, character, following) {
+        output = ""
+        quote = ""
+        escaped = 0
+        for (i = 1; i <= length(text); i++) {
+          character = substr(text, i, 1)
+          following = substr(text, i + 1, 1)
+          if (quote != "") {
+            output = output character
+            if (escaped) {
+              escaped = 0
+            } else if (character == "\\") {
+              escaped = 1
+            } else if (character == quote) {
+              quote = ""
+            }
+          } else if (character == "\"" || character == "\047") {
+            quote = character
+            output = output character
+          } else if (character == "-" && following == "-") {
+            break
+          } else {
+            output = output character
+          }
+        }
+        return output
+      }
+
+      function start_hook_position(text, quote, escaped, i, character, tail) {
+        quote = ""
+        escaped = 0
+        for (i = 1; i <= length(text); i++) {
+          character = substr(text, i, 1)
+          if (quote != "") {
+            if (escaped) {
+              escaped = 0
+            } else if (character == "\\") {
+              escaped = 1
+            } else if (character == quote) {
+              quote = ""
+            }
+          } else if (character == "\"" || character == "\047") {
+            quote = character
+          } else {
+            tail = substr(text, i)
+            if (tail ~ /^hl[.]on[[:space:]]*\([[:space:]]*["\047]hyprland[.]start["\047]/) {
+              return i
+            }
+          }
+        }
+        return 0
+      }
+
       BEGIN {
         active = 0
         depth = 0
@@ -559,21 +647,19 @@ start_callbacks_are_safe() {
       }
 
       {
-        code = $0
+        code = code_before_comment($0)
         trimmed = code
         sub(/^[[:space:]]+/, "", trimmed)
-        if (!active && trimmed ~ /^--/) {
-          next
-        }
 
         if (!active) {
-          if (!match(code, /hl[.]on[[:space:]]*\([[:space:]]*["\047]hyprland[.]start["\047]/)) {
+          hook_at = start_hook_position(code)
+          if (hook_at == 0) {
             next
           }
           active = 1
           depth = 0
           callback = ""
-          code = substr(code, RSTART)
+          code = substr(code, hook_at)
         }
 
         quote = ""
@@ -581,10 +667,6 @@ start_callbacks_are_safe() {
         for (i = 1; i <= length(code); i++) {
           character = substr(code, i, 1)
           following = substr(code, i + 1, 1)
-
-          if (quote == "" && character == "-" && following == "-") {
-            break
-          }
 
           callback = callback character
           if (quote != "") {
@@ -667,9 +749,8 @@ if start_callbacks_are_safe "${unsafe_fixture}"; then
 fi
 cat >"${unsafe_fixture}" <<'LUA'
 local function exec(command)
-  local weekend = weekend
-  if command then
-    command = command
+  local marker = "uwsm app -- function if do repeat end until"; if command then
+    local weekend = "end until"
   end
   return hl.exec_cmd(command)
 end
@@ -691,6 +772,22 @@ if start_callbacks_are_safe "${unsafe_fixture}"; then
   printf 'Startup callback guard accepted a dispatcher function reference.\n' >&2
   exit 1
 fi
+cat >"${unsafe_fixture}" <<'LUA'
+local function exec(command)
+  return hl.exec_cmd(command)
+LUA
+if unclosed_output="$(start_callbacks_are_safe "${unsafe_fixture}" 2>&1)"; then
+  printf 'Startup callback guard accepted an unclosed dispatcher wrapper.\n' >&2
+  exit 1
+fi
+case "${unclosed_output}" in
+  *'Unclosed file-scope function while checking startup callbacks: exec'*) ;;
+  *)
+    printf 'Unclosed dispatcher wrapper lacked its diagnostic:\n%s\n' \
+      "${unclosed_output}" >&2
+    exit 1
+    ;;
+esac
 for unsafe_call in \
   'hl.exec_cmd("unsafe-example")' \
   'hl.dsp.exec_cmd("unsafe-example")' \
@@ -709,6 +806,8 @@ done
 
 safe_fixture="${callback_test_root}/safe.lua"
 cat >"${safe_fixture}" <<'LUA'
+local explanation = true -- hl.on("hyprland.start", function() hl.exec_cmd("docs") end)
+local example = 'hl.on("hyprland.start", function() hl.exec_cmd("docs") end)'
 hl.on("hyprland.start", function()
   hl.dispatch(hl.dsp.focus({ workspace = 2 }))
 end)
@@ -716,6 +815,6 @@ LUA
 start_callbacks_are_safe "${safe_fixture}"
 rm -rf "${callback_test_root}"
 callback_test_root=""
-printf 'ok: startup callbacks reject nested, direct, and referenced dispatcher aliases\n'
+printf 'ok: startup callbacks lex comments and reject unsafe dispatcher aliases\n'
 
 HYPRLAND_BIN="${HYPRLAND_BIN:-}" "${repo_dir}/tests/hyprland-lua.sh"
