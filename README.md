@@ -23,13 +23,41 @@ packages/
 ```
 
 Home Manager restows the selected packages during activation. To do the same
-manually:
+manually, install GNU Stow and GNU coreutils first. `install.sh` uses the
+native GNU `realpath` and `mv` on Linux and Homebrew's `grealpath` and `gmv`
+on macOS. It exits with an installation hint when those commands are absent.
+Run it from the root of a Git 2.31-or-newer checkout. The installer rejects
+symlinks, empty directories, special entries, and package-local Stow ignore
+files inside selected packages. It runs Stow with empty resource and global
+ignore files, so compiled-in ignores and repository-local or user `~/.stowrc`
+options cannot change the validated plan.
 
 ```shell
 ./install.sh
 ./install.sh git ssh
 ./install.sh --check themes
 ```
+
+`--check` validates the selected packages' enumerated leaf targets, parent
+paths, and worktree-link ownership. It does not simulate obsolete-link
+removals that GNU Stow performs during `--restow`. If Stow is interrupted, its
+changes are not transactional; rerun the same install command reported by the
+installer.
+
+Run the complete worktree-transition and fleet-package regression suite with:
+
+```shell
+./tests/run.sh
+```
+
+The suite requires Git 2.31 or newer, Bash 3.2 or newer, GNU Stow, GNU
+coreutils, Zsh, and
+`ssh-agent`. By default it also requires Nix with network access or an already
+populated store. The Hyprland composition test builds the pinned Hyprland
+revision and Lua 5.4 with Nix. To avoid those builds, set both `HYPRLAND_BIN`
+and `LUA_BIN` to compatible local executables; the Hyprland binary MUST still
+report the pinned version and revision. The suite uses disposable homes and a
+disposable package copy. It MUST NOT edit the tracked package checkout.
 
 Configuration in `packages/` should refer to dependencies by executable name,
 not by `/nix/store` path, so Nix can continue to own dependency provisioning.
@@ -142,10 +170,11 @@ For example, if you "stow" the nvim directory, Stow will link its contents into 
 
 Install [brew](https://brew.sh/) for both linux or mac.
 
-Ensure you have GNU Stow installed on your system. Ripgrep and Lazygit are needed later.
+Ensure you have GNU Stow and GNU coreutils installed on your system. Ripgrep
+and Lazygit are needed later.
 
 ```shell
-brew install stow ripgrep jesseduffield/lazygit/lazygit
+brew install coreutils stow ripgrep jesseduffield/lazygit/lazygit
 ```
 
 Then clone this repo somewhere. Then unstow a configuration. (Not it will error if any files would be overwritten)
