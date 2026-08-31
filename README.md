@@ -18,7 +18,7 @@ packages/
   git/              .config/git/config
   ssh/              .ssh/config
   hyprland-common/  .config/hypr/hyprland.lua
-                    .config/uwsm/{env,env-hyprland}
+                    .config/uwsm/env-hyprland
   themes/           .config/keystone/theme-catalogs/user/
 ```
 
@@ -103,11 +103,12 @@ theme selector points `~/.config/themes/current` at one theme directory. A
 normal `./install.sh` restow removes obsolete `hyprland.conf`, `ncrmro.conf`,
 and `host.conf` links after this migration.
 
-UWSM owns the session environment. It reads `.config/uwsm/env` before the
-graphical session and `.config/uwsm/env-hyprland` for Hyprland-specific values.
-Do not add manual systemd or D-Bus environment imports to `hyprland.lua`.
-Graphical launch binds use `uwsm app --`. Keystone's systemd user units own
-persistent background processes.
+`ks.systems/desktop` generates `.config/uwsm/env` because the generic session
+environment is runtime wiring. This repository retains
+`.config/uwsm/env-hyprland` for editable Hyprland-specific cursor preferences.
+Do not reconstruct profile paths or add manual systemd or D-Bus environment
+imports here. Graphical launch binds use `uwsm app --`. Keystone's systemd user
+units own persistent background processes.
 
 Hyprland ecosystem tools keep their own Hyprlang files. These files are
 `hypridle.conf`, `hyprlock.conf`, `hyprpaper.conf`, `hyprsunset.conf`, and
