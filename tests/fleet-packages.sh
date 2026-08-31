@@ -441,6 +441,43 @@ start_callbacks_are_safe() {
   local file
   local unsafe_aliases
   for file in "$@"; do
+    # The focused analyzers below intentionally handle quoted strings and
+    # line comments only. Reject Lua long-bracket strings/comments explicitly
+    # so their body tokens can never corrupt block or parenthesis depth.
+    if ! awk '
+      {
+        quote = ""
+        escaped = 0
+        for (i = 1; i <= length($0); i++) {
+          character = substr($0, i, 1)
+          following = substr($0, i + 1, 1)
+          if (quote != "") {
+            if (escaped) {
+              escaped = 0
+            } else if (character == "\\") {
+              escaped = 1
+            } else if (character == quote) {
+              quote = ""
+            }
+          } else if (character == "\"" || character == "\047") {
+            quote = character
+          } else if (character == "-" && following == "-") {
+            if (substr($0, i) ~ /^--\[=*\[/) {
+              printf "Unsupported Lua long-bracket syntax while checking startup callbacks: %s:%d\n", \
+                FILENAME, FNR > "/dev/stderr"
+              exit 1
+            }
+            break
+          } else if (substr($0, i) ~ /^\[=*\[/) {
+            printf "Unsupported Lua long-bracket syntax while checking startup callbacks: %s:%d\n", \
+              FILENAME, FNR > "/dev/stderr"
+            exit 1
+          }
+        }
+      }
+    ' "${file}"; then
+      return 1
+    fi
     if ! unsafe_aliases="$(awk '
       function count_word(text, word, count, remaining, pattern) {
         count = 0
@@ -774,6 +811,40 @@ if start_callbacks_are_safe "${unsafe_fixture}"; then
 fi
 cat >"${unsafe_fixture}" <<'LUA'
 local function exec(command)
+  --[[
+  end
+  ]]
+  return hl.exec_cmd(command)
+end
+hl.on("hyprland.start", exec)
+LUA
+if long_bracket_output="$(start_callbacks_are_safe "${unsafe_fixture}" 2>&1)"; then
+  printf 'Startup callback guard accepted a long-comment dispatcher bypass.\n' >&2
+  exit 1
+fi
+expected_long_bracket="Unsupported Lua long-bracket syntax while checking startup callbacks: ${unsafe_fixture}:2"
+if [[ "${long_bracket_output}" != "${expected_long_bracket}" ]]; then
+  printf 'Long-comment dispatcher bypass lacked its exact diagnostic:\n%s\n' \
+    "${long_bracket_output}" >&2
+  exit 1
+fi
+cat >"${unsafe_fixture}" <<'LUA'
+local documentation = [=[
+No startup callback is defined here.
+]=]
+LUA
+if long_bracket_output="$(start_callbacks_are_safe "${unsafe_fixture}" 2>&1)"; then
+  printf 'Startup callback guard silently accepted an unsupported long string.\n' >&2
+  exit 1
+fi
+expected_long_bracket="Unsupported Lua long-bracket syntax while checking startup callbacks: ${unsafe_fixture}:1"
+if [[ "${long_bracket_output}" != "${expected_long_bracket}" ]]; then
+  printf 'Unsupported long string lacked its exact diagnostic:\n%s\n' \
+    "${long_bracket_output}" >&2
+  exit 1
+fi
+cat >"${unsafe_fixture}" <<'LUA'
+local function exec(command)
   return hl.exec_cmd(command)
 LUA
 if unclosed_output="$(start_callbacks_are_safe "${unsafe_fixture}" 2>&1)"; then
@@ -808,6 +879,7 @@ safe_fixture="${callback_test_root}/safe.lua"
 cat >"${safe_fixture}" <<'LUA'
 local explanation = true -- hl.on("hyprland.start", function() hl.exec_cmd("docs") end)
 local example = 'hl.on("hyprland.start", function() hl.exec_cmd("docs") end)'
+local bracket_example = "[=[ordinary quoted text]=]"
 hl.on("hyprland.start", function()
   hl.dispatch(hl.dsp.focus({ workspace = 2 }))
 end)

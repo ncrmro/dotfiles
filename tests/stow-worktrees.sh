@@ -659,10 +659,12 @@ assert_check_rejected \
   "Linked source is not inside a Git worktree: ${test_root}/foreign-source" \
   git
 rm "${home}/.config/git/config"
-ln -s /tmp/missing-dotfiles-source "${home}/.config/git/config"
+missing_leaf="$("${test_realpath}" -m -- "${test_root}/missing-dotfiles-source")"
+test ! -e "${missing_leaf}"
+ln -s "${missing_leaf}" "${home}/.config/git/config"
 assert_check_rejected \
   "${home}" "${test_root}/canonical/install.sh" "broken leaf symlink" \
-  "Unexpected link target: ${home}/.config/git/config -> /tmp/missing-dotfiles-source (expected ${test_root}/canonical/packages/git/.config/git/config)" \
+  "Unexpected link target: ${home}/.config/git/config -> ${missing_leaf} (expected ${test_root}/canonical/packages/git/.config/git/config)" \
   git
 rm "${home}/.config/git/config"
 printf 'collision\n' >"${home}/.config/git/config"
