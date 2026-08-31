@@ -439,13 +439,57 @@ printf 'ok: Hyprland Lua contract\n'
 
 start_callbacks_are_safe() {
   local file
+  local unsafe_aliases
   for file in "$@"; do
-    awk '
+    unsafe_aliases="$(awk '
+      {
+        code = $0
+        trimmed = code
+        sub(/^[[:space:]]+/, "", trimmed)
+
+        if (function_alias == "") {
+          if (trimmed ~ /^(local[[:space:]]+)?function[[:space:]]+[[:alpha:]_][[:alnum:]_]*[[:space:]]*[(]/) {
+            declaration = trimmed
+            sub(/^local[[:space:]]+/, "", declaration)
+            sub(/^function[[:space:]]+/, "", declaration)
+            sub(/[[:space:]]*[(].*/, "", declaration)
+            function_alias = declaration
+            function_unsafe = 0
+          } else if (trimmed ~ /^(local[[:space:]]+)?[[:alpha:]_][[:alnum:]_]*[[:space:]]*=[[:space:]]*function([[:space:]]|[(])/) {
+            declaration = trimmed
+            sub(/^local[[:space:]]+/, "", declaration)
+            sub(/[[:space:]]*=.*/, "", declaration)
+            function_alias = declaration
+            function_unsafe = 0
+          }
+        }
+
+        if (function_alias != "" \
+          && code ~ /hl[.](dsp[.])?exec_(cmd|raw)[[:space:]]*[(]/) {
+          function_unsafe = 1
+        }
+        if (function_alias != "" && trimmed ~ /end[[:space:]]*;?([[:space:]]*--.*)?$/) {
+          if (function_unsafe) {
+            print function_alias
+          }
+          function_alias = ""
+          function_unsafe = 0
+        }
+
+        assignment = trimmed
+        if (assignment ~ /^(local[[:space:]]+)?[[:alpha:]_][[:alnum:]_]*[[:space:]]*=[[:space:]]*hl[.](dsp[.])?exec_(cmd|raw)([^[:alnum:]_]|$)/) {
+          sub(/^local[[:space:]]+/, "", assignment)
+          sub(/[[:space:]]*=.*/, "", assignment)
+          print assignment
+        }
+      }
+    ' "${file}")"
+    awk -v unsafe_aliases="${unsafe_aliases}" '
       # Contract: hyprland.start callbacks may only perform compositor-local
       # typed dispatch and configuration work. They must not launch a shell,
       # process, GUI, or long-lived service, directly or through a local
       # alias of a Hyprland command dispatcher.
-      function unsafe(callback, normalized, remaining, assignment, alias, pattern) {
+      function unsafe(callback, normalized, remaining, assignment, alias, pattern, alias_i) {
         normalized = callback
         gsub(/[[:space:]]+/, " ", normalized)
         if (normalized ~ /hl[.]exec_(cmd|raw)[[:space:]]*\(/ \
@@ -454,6 +498,14 @@ start_callbacks_are_safe() {
           || normalized ~ /io[.]popen[[:space:]]*\(/ \
           || normalized ~ /uwsm[[:space:]]+app/) {
           return 1
+        }
+
+        for (alias_i = 1; alias_i <= alias_count; alias_i++) {
+          alias = file_aliases[alias_i]
+          if (alias != "" \
+            && normalized ~ ("(^|[^[:alnum:]_])" alias "[[:space:]]*[(]")) {
+            return 1
+          }
         }
 
         remaining = normalized
@@ -475,6 +527,7 @@ start_callbacks_are_safe() {
       BEGIN {
         active = 0
         depth = 0
+        alias_count = split(unsafe_aliases, file_aliases, "\n")
       }
 
       {
@@ -562,6 +615,28 @@ LUA
     exit 1
   fi
 done
+cat >"${unsafe_fixture}" <<'LUA'
+local exec = hl.exec_cmd
+hl.on("hyprland.start", function()
+  exec("unsafe-example")
+end)
+LUA
+if start_callbacks_are_safe "${unsafe_fixture}"; then
+  printf 'Startup callback guard accepted a file-scope dispatcher assignment.\n' >&2
+  exit 1
+fi
+cat >"${unsafe_fixture}" <<'LUA'
+local function exec(command)
+  return hl.exec_cmd(command)
+end
+hl.on("hyprland.start", function()
+  exec("unsafe-example")
+end)
+LUA
+if start_callbacks_are_safe "${unsafe_fixture}"; then
+  printf 'Startup callback guard accepted the repo-style dispatcher function.\n' >&2
+  exit 1
+fi
 for unsafe_call in \
   'hl.exec_cmd("unsafe-example")' \
   'hl.dsp.exec_cmd("unsafe-example")' \
@@ -587,6 +662,6 @@ LUA
 start_callbacks_are_safe "${safe_fixture}"
 rm -rf "${callback_test_root}"
 callback_test_root=""
-printf 'ok: active startup callbacks are compositor-local\n'
+printf 'ok: startup callbacks reject direct and file-scope dispatcher aliases\n'
 
 HYPRLAND_BIN="${HYPRLAND_BIN:-}" "${repo_dir}/tests/hyprland-lua.sh"

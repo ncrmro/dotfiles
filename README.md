@@ -37,6 +37,12 @@ the validated plan.
 ./install.sh --check themes
 ```
 
+`--check` validates the selected packages' enumerated leaf targets, parent
+paths, and worktree-link ownership. It does not simulate obsolete-link
+removals that GNU Stow performs during `--restow`. If Stow is interrupted, its
+changes are not transactional; rerun the same install command reported by the
+installer.
+
 Run the complete worktree-transition and fleet-package regression suite with:
 
 ```shell

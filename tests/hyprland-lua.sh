@@ -143,10 +143,12 @@ if host_output="$(verify_config "${test_home}" "${runtime_dir}")"; then
   printf 'Hyprland accepted an invalid host module.\n' >&2
   exit 1
 fi
-grep -Fq 'require("host"):' <<<"${host_output}"
-grep -Fq 'broken host' <<<"${host_output}"
+host_output_file="${test_root}/invalid-host-output.log"
+printf '%s\n' "${host_output}" >"${host_output_file}"
+grep -Fq 'require("host"):' "${host_output_file}"
+grep -Fq 'broken host' "${host_output_file}"
 refute 'invalid host output must not report a valid config' \
-  -F 'config ok' <<<"${host_output}"
+  -F 'config ok' "${host_output_file}"
 printf 'ok: invalid host is a diagnosed config error\n'
 
 close_binding="${test_root}/chrome-hold-close.lua"

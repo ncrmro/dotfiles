@@ -56,7 +56,7 @@ printf '%s\n' \
   '  for argument do printf "\t%s" "${argument}" >>"${COREUTILS_SHIM_LOG}"; done' \
   '  printf "\n" >>"${COREUTILS_SHIM_LOG}"' \
   '  if [ "${COREUTILS_SHIM_FAIL_MV:-0}" = 1 ]; then exit 42; fi' \
-  '  if [ -n "${COREUTILS_SHIM_FAIL_MV_AT:-}${COREUTILS_SHIM_SIGNAL_MV_AT:-}" ]; then' \
+  '  if [ -n "${COREUTILS_SHIM_FAIL_MV_AT:-}${COREUTILS_SHIM_SIGNAL_MV_AT:-}${COREUTILS_SHIM_SIGNAL_AFTER_MV_AT:-}" ]; then' \
   '    move_count="$(grep -c "^gmv" "${COREUTILS_SHIM_LOG}")"' \
   '    case ",${COREUTILS_SHIM_FAIL_MV_AT:-}," in' \
   '      *,"${move_count}",*) exit 42 ;;' \
@@ -65,11 +65,33 @@ printf '%s\n' \
   '      kill -"${COREUTILS_SHIM_SIGNAL_NAME:-TERM}" "${PPID}"' \
   '      exit 143' \
   '    fi' \
+  '    if [ "${move_count}" = "${COREUTILS_SHIM_SIGNAL_AFTER_MV_AT:-}" ]; then' \
+  "      \"${test_mv}\" \"\$@\"" \
+  '      move_status="$?"' \
+  '      if [ "${move_status}" -eq 0 ]; then' \
+  '        kill -"${COREUTILS_SHIM_SIGNAL_NAME:-TERM}" "${PPID}"' \
+  '      fi' \
+  '      exit "${move_status}"' \
+  '    fi' \
   '  fi' \
   'fi' \
   "exec \"${test_mv}\" \"\$@\"" \
   >"${coreutils_shim}/gmv"
 chmod +x "${coreutils_shim}/grealpath" "${coreutils_shim}/gmv"
+
+test_stow="$(command -v stow)"
+stow_shim="${test_root}/stow-shim"
+mkdir -p "${stow_shim}"
+printf '%s\n' \
+  '#!/bin/sh' \
+  "\"${test_stow}\" \"\$@\"" \
+  'stow_status="$?"' \
+  'if [ "${stow_status}" -eq 0 ] && [ "${STOW_SHIM_SIGNAL_AFTER:-0}" = 1 ]; then' \
+  '  kill -"${STOW_SHIM_SIGNAL_NAME:-TERM}" "${PPID}"' \
+  'fi' \
+  'exit "${stow_status}"' \
+  >"${stow_shim}/stow"
+chmod +x "${stow_shim}/stow"
 
 assert_target() {
   local target="$1"
@@ -416,14 +438,73 @@ for signal_case in INT:130 TERM:143; do
   fi
   test "${signal_status}" -eq "${expected_signal_status}"
   grep -Fxq \
-    "Interrupted by ${signal_name}; rolling back 1 committed retarget(s)." \
+    "Interrupted by ${signal_name}; rolling back 2 retarget(s), including any in-flight move." \
     <<<"${signal_output}"
   test "$(readlink "${home}/.config/git/config")" = "${git_before}"
   test "$(readlink "${home}/.ssh/config")" = "${ssh_before}"
-  test "$(grep -c '^gmv' "${coreutils_shim_log}")" -eq 3
+  test "$(grep -c '^gmv' "${coreutils_shim_log}")" -eq 4
   assert_check_clean "${home}" "${test_root}/canonical/install.sh" git ssh
 done
 printf 'ok: INT and TERM during a retarget batch roll back committed moves\n'
+
+# A signal sent after the second mv commits but before it returns also restores
+# both links, closing the in-flight bookkeeping race.
+home="$(new_home signaled-after-mv-retarget-rollback)"
+HOME="${home}" "${test_root}/canonical/install.sh" git ssh
+git_before="$(readlink "${home}/.config/git/config")"
+ssh_before="$(readlink "${home}/.ssh/config")"
+: >"${coreutils_shim_log}"
+if after_mv_signal_output="$(
+  COREUTILS_SHIM_SIGNAL_AFTER_MV_AT=2 \
+  COREUTILS_SHIM_SIGNAL_NAME=TERM \
+  COREUTILS_SHIM_LOG="${coreutils_shim_log}" \
+  PATH="${coreutils_shim}:${PATH}" \
+  HOME="${home}" \
+  "${test_root}/sibling/install.sh" git ssh 2>&1
+)"; then
+  printf 'injected TERM after the second GNU mv was accepted\n' >&2
+  exit 1
+else
+  after_mv_signal_status=$?
+fi
+test "${after_mv_signal_status}" -eq 143
+grep -Fxq \
+  'Interrupted by TERM; rolling back 2 retarget(s), including any in-flight move.' \
+  <<<"${after_mv_signal_output}"
+test "$(readlink "${home}/.config/git/config")" = "${git_before}"
+test "$(readlink "${home}/.ssh/config")" = "${ssh_before}"
+test "$(grep -c '^gmv' "${coreutils_shim_log}")" -eq 4
+assert_check_clean "${home}" "${test_root}/canonical/install.sh" git ssh
+printf 'ok: after-mv signal rolls back the in-flight committed retarget\n'
+
+# Stow itself is not transactional. An interruption names the affected
+# packages and exact rerun command without claiming to undo Stow's changes.
+home="$(new_home interrupted-stow)"
+if interrupted_stow_output="$(
+  STOW_SHIM_SIGNAL_AFTER=1 \
+  STOW_SHIM_SIGNAL_NAME=TERM \
+  PATH="${stow_shim}:${PATH}" \
+  HOME="${home}" \
+  "${test_root}/canonical/install.sh" git ssh 2>&1
+)"; then
+  printf 'injected TERM after Stow restow was accepted\n' >&2
+  exit 1
+else
+  interrupted_stow_status=$?
+fi
+test "${interrupted_stow_status}" -eq 143
+grep -Fxq \
+  "Interrupted by TERM while Stow was restowing packages: git ssh. Stow changes are not transactional; rerun: ${test_root}/canonical/install.sh git ssh" \
+  <<<"${interrupted_stow_output}"
+assert_target \
+  "${home}/.config/git/config" \
+  "${test_root}/canonical/packages/git/.config/git/config"
+assert_target \
+  "${home}/.ssh/config" \
+  "${test_root}/canonical/packages/ssh/.ssh/config"
+HOME="${home}" "${test_root}/canonical/install.sh" git ssh
+assert_check_clean "${home}" "${test_root}/canonical/install.sh" git ssh
+printf 'ok: interrupted Stow reports packages and a convergent rerun\n'
 
 # If both the second move and rollback move fail, report the exact mixed state.
 home="$(new_home failed-retarget-rollback)"

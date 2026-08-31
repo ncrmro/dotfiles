@@ -38,6 +38,9 @@ home_dir="$("${realpath_bin}" -m -- "${HOME}")"
 retarget_temporary=""
 retarget_batch_active=false
 retarget_committed=0
+retarget_in_flight=-1
+stow_active=false
+stow_packages=""
 stow_control_dir=""
 
 cleanup_retarget_temporary() {
@@ -58,14 +61,26 @@ cleanup_installer() {
 exit_for_signal() {
   local status="$1"
   local signal_name="$2"
+  local rollback_last
 
   trap - HUP INT TERM
   cleanup_retarget_temporary
-  if [[ "${retarget_batch_active}" == true && "${retarget_committed}" -gt 0 ]]; then
+  if [[ "${stow_active}" == true ]]; then
+    stow_active=false
+    printf 'Interrupted by %s while Stow was restowing packages: %s. Stow changes are not transactional; rerun: %s/install.sh %s\n' \
+      "${signal_name}" "${stow_packages}" "${repo_dir}" "${stow_packages}" >&2
+    exit "${status}"
+  fi
+  if [[ "${retarget_batch_active}" == true \
+    && ( "${retarget_committed}" -gt 0 || "${retarget_in_flight}" -ge 0 ) ]]; then
     retarget_batch_active=false
-    printf 'Interrupted by %s; rolling back %d committed retarget(s).\n' \
-      "${signal_name}" "${retarget_committed}" >&2
-    if ! rollback_retargets "$((retarget_committed - 1))"; then
+    rollback_last=$((retarget_committed - 1))
+    if [[ "${retarget_in_flight}" -gt "${rollback_last}" ]]; then
+      rollback_last="${retarget_in_flight}"
+    fi
+    printf 'Interrupted by %s; rolling back %d retarget(s), including any in-flight move.\n' \
+      "${signal_name}" "$((rollback_last + 1))" >&2
+    if ! rollback_retargets "${rollback_last}"; then
       printf 'Interrupt rollback was incomplete; inspect the reported links.\n' >&2
     fi
   fi
@@ -345,9 +360,8 @@ if [[ "${broken}" -ne 0 ]]; then
 fi
 
 if [[ "${check}" == true ]]; then
-  # This explicit walk is the authoritative collision check. GNU Stow's
-  # simulation rejects a safe sibling-worktree transition based on the link's
-  # lexical spelling even when both sources have identical repository paths.
+  # This walk certifies enumerated leaf/parent collisions and owned retargets.
+  # It deliberately does not predict obsolete-link removals made by --restow.
   for ((i = 0; i < ${#retarget_targets[@]}; i++)); do
     relative="$(
       "${realpath_bin}" -m \
@@ -358,11 +372,13 @@ if [[ "${check}" == true ]]; then
   exit 0
 fi
 
-# No link is changed until every selected package, target, and parent passes.
+# No retarget is changed until every selected leaf, parent, and owner passes.
 # If an atomic move fails, restore every link moved earlier in this batch.
 retarget_batch_active=true
 for ((i = 0; i < ${#retarget_targets[@]}; i++)); do
+  retarget_in_flight="${i}"
   if ! retarget_link "${retarget_targets[i]}" "${retarget_expecteds[i]}"; then
+    retarget_in_flight=-1
     retarget_batch_active=false
     printf 'Failed to retarget link: %s; rolling back %d earlier link(s).\n' \
       "${retarget_targets[i]}" "${i}" >&2
@@ -371,7 +387,8 @@ for ((i = 0; i < ${#retarget_targets[@]}; i++)); do
     fi
     exit 1
   fi
-  retarget_committed=$((retarget_committed + 1))
+  retarget_committed=$((i + 1))
+  retarget_in_flight=-1
 done
 retarget_batch_active=false
 
@@ -381,7 +398,10 @@ retarget_batch_active=false
 stow_control_dir="$(
   mktemp -d "${TMPDIR:-/tmp}/dotfiles-stow-control.XXXXXXXXXX"
 )"
-(
-  cd "${stow_control_dir}"
-  HOME="${stow_control_dir}" stow "${stow_args[@]}" "${selected[@]}"
-)
+stow_packages="${selected[*]}"
+stow_working_dir="$(pwd -P)"
+cd "${stow_control_dir}"
+stow_active=true
+HOME="${stow_control_dir}" stow "${stow_args[@]}" "${selected[@]}"
+stow_active=false
+cd "${stow_working_dir}"
