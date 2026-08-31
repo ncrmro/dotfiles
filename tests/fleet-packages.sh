@@ -144,6 +144,40 @@ git init -q "${stow_root}"
 terminal=(bin bat btop git helix lazygit ssh themes zellij zsh)
 desktop=(clipse ghostty hyprland-common omarchy satty walker wofi)
 
+# Model the coordinated ownership handoff without touching the tracked
+# checkout. The consumer removes only the verified legacy Stow link before it
+# generates the runtime environment. A subsequent dotfiles restow must retain
+# that generated file and the editable Hyprland-specific link.
+tracked_before="$(git -C "${repo_dir}" status --porcelain=v1 --untracked-files=all)"
+legacy_env_source="${stow_root}/packages/hyprland-common/.config/uwsm/env"
+handoff_home="${test_root}/home-uwsm-handoff"
+mkdir -p "${handoff_home}" "$(dirname "${legacy_env_source}")"
+printf 'export LEGACY_STOW_ENV=1\n' >"${legacy_env_source}"
+HOME="${handoff_home}" "${stow_root}/install.sh" hyprland-common
+legacy_env_target="${handoff_home}/.config/uwsm/env"
+test -L "${legacy_env_target}"
+test "$("${test_realpath}" -m -- "${legacy_env_target}")" = \
+  "$("${test_realpath}" -m -- "${legacy_env_source}")"
+rm "${legacy_env_target}"
+rm "${legacy_env_source}"
+printf 'desktop-generated session environment\n' >"${legacy_env_target}"
+HOME="${handoff_home}" "${stow_root}/install.sh" hyprland-common
+test -f "${legacy_env_target}"
+test ! -L "${legacy_env_target}"
+grep -Fxq 'desktop-generated session environment' "${legacy_env_target}"
+test -L "${handoff_home}/.config/uwsm/env-hyprland"
+test "$("${test_realpath}" -m -- "${handoff_home}/.config/uwsm/env-hyprland")" = \
+  "$("${test_realpath}" -m -- "${stow_root}/packages/hyprland-common/.config/uwsm/env-hyprland")"
+assert_path_absent 'tracked dotfiles still own the generic UWSM environment' \
+  "${repo_dir}/packages/hyprland-common/.config/uwsm/env"
+tracked_after="$(git -C "${repo_dir}" status --porcelain=v1 --untracked-files=all)"
+if [[ "${tracked_after}" != "${tracked_before}" ]]; then
+  printf 'UWSM ownership handoff mutated the tracked checkout.\n' >&2
+  exit 1
+fi
+rm -rf "${handoff_home}"
+printf 'ok: UWSM runtime ownership handoff\n'
+
 compositions=(
   # Mirrors dotfiles.packages per host in ks-config. Mercury is infrastructure,
   # not a development host, and keeps its own three-package list; maia does not
@@ -223,7 +257,8 @@ for composition in "${compositions[@]}"; do
   if [[ " ${packages[*]} " == *" hyprland-common "* ]]; then
     test -L "${test_home}/.config/hypr/hyprland.lua"
     test -L "${test_home}/.config/hypr/user.lua"
-    test -L "${test_home}/.config/uwsm/env"
+    assert_path_absent 'dotfiles installed the generic UWSM environment' \
+      "${test_home}/.config/uwsm/env"
     test -L "${test_home}/.config/uwsm/env-hyprland"
     assert_path_absent 'obsolete Hyprland config remains' \
       "${test_home}/.config/hypr/hyprland.conf"
@@ -260,7 +295,6 @@ printf 'ok: Zellij theme contract\n'
 hypridle_conf="${repo_dir}/packages/hyprland-common/.config/hypr/hypridle.conf"
 hyprland_lua="${repo_dir}/packages/hyprland-common/.config/hypr/hyprland.lua"
 ghostty_config="${repo_dir}/packages/ghostty/.config/ghostty/config"
-uwsm_env="${repo_dir}/packages/hyprland-common/.config/uwsm/env"
 uwsm_hyprland_env="${repo_dir}/packages/hyprland-common/.config/uwsm/env-hyprland"
 zsh_env="${repo_dir}/packages/zsh/.zshenv"
 zsh_rc="${repo_dir}/packages/zsh/.zshrc"
@@ -289,14 +323,13 @@ done < <(
   find "${repo_dir}/packages" -type f \
     \( -path '*/.config/hypr/*.lua' \
     -o -path '*/.config/hypr/*.conf' \
-    -o -path '*/.config/uwsm/env' \
     -o -path '*/.config/uwsm/env-hyprland' \
     -o -path '*/.config/omarchy/shell.json' \
     -o -path '*/.config/keystone/theme-catalogs/user/*/hyprland.lua' \) \
     -print | sort
 )
-if [[ "${#waybar_guard_configs[@]}" -ne 18 ]]; then
-  printf 'Expected 18 active desktop configuration files. Found %d.\n' \
+if [[ "${#waybar_guard_configs[@]}" -ne 17 ]]; then
+  printf 'Expected 17 active desktop configuration files. Found %d.\n' \
     "${#waybar_guard_configs[@]}" >&2
   exit 1
 fi
@@ -377,12 +410,8 @@ refute 'active Hyprland configuration must not invoke Waybar' \
 refute 'Hyprland config must not import or tear down the session environment' \
   -E 'systemctl --user import-environment|dbus-update-activation-environment|hyprctl dispatch exit' \
   "${hyprland_lua}"
-refute 'generic UWSM environment must not set renderer or cursor overrides' \
-  -E 'WLR_RENDERER_ALLOW_SOFTWARE|HYPRCURSOR_' "${uwsm_env}"
-refute 'generic UWSM environment must not force GTK_THEME' \
-  -E '^[[:space:]]*export[[:space:]]+GTK_THEME=' "${uwsm_env}"
-grep -Fxq 'export XDG_DATA_DIRS="${XDG_DATA_DIRS:-$HOME/.local/share:/usr/local/share:/usr/share}:$HOME/.nix-profile/share:/nix/var/nix/profiles/default/share"' "${uwsm_env}"
-grep -Fxq 'export SSH_AUTH_SOCK="${XDG_RUNTIME_DIR}/gcr/ssh"' "${uwsm_env}"
+assert_path_absent 'dotfiles retain the generic UWSM environment source' \
+  "${repo_dir}/packages/hyprland-common/.config/uwsm/env"
 grep -Fxq 'export HYPRCURSOR_SIZE=24' "${uwsm_hyprland_env}"
 grep -Fxq 'export HYPRCURSOR_THEME=Adwaita' "${uwsm_hyprland_env}"
 refute 'Hyprland UWSM environment must not allow the software renderer' \
