@@ -27,9 +27,10 @@ manually, install GNU Stow and GNU coreutils first. `install.sh` uses the
 native GNU `realpath` and `mv` on Linux and Homebrew's `grealpath` and `gmv`
 on macOS. It exits with an installation hint when those commands are absent.
 Run it from the root of a Git 2.31-or-newer checkout. The installer rejects
-symlink entries inside `packages/` and runs Stow with an empty resource-file
-environment, so repository-local and user `~/.stowrc` options cannot change
-the validated plan.
+symlinks, empty directories, special entries, and package-local Stow ignore
+files inside selected packages. It runs Stow with empty resource and global
+ignore files, so compiled-in ignores and repository-local or user `~/.stowrc`
+options cannot change the validated plan.
 
 ```shell
 ./install.sh

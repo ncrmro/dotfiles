@@ -279,6 +279,35 @@ for package in "${selected[@]}"; do
     printf 'Unknown dotfiles package: %s\n' "${package}" >&2
     exit 1
   fi
+  if [[ -e "${packages_dir}/${package}/.stow-local-ignore" \
+    || -L "${packages_dir}/${package}/.stow-local-ignore" ]]; then
+    printf 'Selected package must not contain .stow-local-ignore: %s\n' \
+      "${packages_dir}/${package}/.stow-local-ignore" >&2
+    exit 1
+  fi
+done
+
+# Stow can create empty directories and handle special entries in ways this
+# leaf-oriented preflight cannot certify. Reject them before planning retargets.
+for package in "${selected[@]}"; do
+  package_dir="${packages_dir}/${package}"
+  while IFS= read -r -d '' entry; do
+    if [[ -L "${entry}" ]]; then
+      continue
+    fi
+    if [[ -d "${entry}" ]]; then
+      if [[ -z "$(find "${entry}" -mindepth 1 -maxdepth 1 -print)" ]]; then
+        printf 'Package tree contains an empty directory: %s\n' "${entry}" >&2
+        exit 1
+      fi
+      continue
+    fi
+    if [[ -f "${entry}" ]]; then
+      continue
+    fi
+    printf 'Package tree contains an unsupported entry type: %s\n' "${entry}" >&2
+    exit 1
+  done < <(find "${package_dir}" -print0)
 done
 
 stow_args=(
@@ -398,6 +427,7 @@ retarget_batch_active=false
 stow_control_dir="$(
   mktemp -d "${TMPDIR:-/tmp}/dotfiles-stow-control.XXXXXXXXXX"
 )"
+: >"${stow_control_dir}/.stow-global-ignore"
 stow_packages="${selected[*]}"
 stow_working_dir="$(pwd -P)"
 cd "${stow_control_dir}"

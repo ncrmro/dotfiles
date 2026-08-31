@@ -442,8 +442,23 @@ start_callbacks_are_safe() {
   local unsafe_aliases
   for file in "$@"; do
     unsafe_aliases="$(awk '
+      function count_word(text, word, count, remaining, pattern) {
+        count = 0
+        remaining = text
+        pattern = "(^|[^[:alnum:]_])" word "([^[:alnum:]_]|$)"
+        while (match(remaining, pattern)) {
+          count++
+          remaining = substr(remaining, RSTART + RLENGTH)
+        }
+        return count
+      }
+
       {
         code = $0
+        structural = code
+        sub(/--.*/, "", structural)
+        gsub(/"([^"\\]|\\.)*"/, "", structural)
+        gsub(/\047([^\047\\]|\\.)*\047/, "", structural)
         trimmed = code
         sub(/^[[:space:]]+/, "", trimmed)
 
@@ -455,25 +470,38 @@ start_callbacks_are_safe() {
             sub(/[[:space:]]*[(].*/, "", declaration)
             function_alias = declaration
             function_unsafe = 0
+            function_depth = 0
           } else if (trimmed ~ /^(local[[:space:]]+)?[[:alpha:]_][[:alnum:]_]*[[:space:]]*=[[:space:]]*function([[:space:]]|[(])/) {
             declaration = trimmed
             sub(/^local[[:space:]]+/, "", declaration)
             sub(/[[:space:]]*=.*/, "", declaration)
             function_alias = declaration
             function_unsafe = 0
+            function_depth = 0
           }
         }
 
-        if (function_alias != "" \
-          && code ~ /hl[.](dsp[.])?exec_(cmd|raw)[[:space:]]*[(]/) {
-          function_unsafe = 1
-        }
-        if (function_alias != "" && trimmed ~ /end[[:space:]]*;?([[:space:]]*--.*)?$/) {
-          if (function_unsafe) {
-            print function_alias
+        if (function_alias != "") {
+          if (code ~ /hl[.](dsp[.])?exec_(cmd|raw)[[:space:]]*[(]/) {
+            function_unsafe = 1
           }
-          function_alias = ""
-          function_unsafe = 0
+          # Lua blocks close only on standalone end/until tokens. Counting
+          # function/if/do/repeat keeps nested blocks from ending the wrapper;
+          # token boundaries prevent identifiers such as weekend from doing so.
+          function_depth += count_word(structural, "function")
+          function_depth += count_word(structural, "if")
+          function_depth += count_word(structural, "do")
+          function_depth += count_word(structural, "repeat")
+          function_depth -= count_word(structural, "end")
+          function_depth -= count_word(structural, "until")
+          if (function_depth <= 0) {
+            if (function_unsafe) {
+              print function_alias
+            }
+            function_alias = ""
+            function_unsafe = 0
+            function_depth = 0
+          }
         }
 
         assignment = trimmed
@@ -503,7 +531,7 @@ start_callbacks_are_safe() {
         for (alias_i = 1; alias_i <= alias_count; alias_i++) {
           alias = file_aliases[alias_i]
           if (alias != "" \
-            && normalized ~ ("(^|[^[:alnum:]_])" alias "[[:space:]]*[(]")) {
+            && normalized ~ ("(^|[^[:alnum:]_])" alias "([^[:alnum:]_]|$)")) {
             return 1
           }
         }
@@ -637,6 +665,32 @@ if start_callbacks_are_safe "${unsafe_fixture}"; then
   printf 'Startup callback guard accepted the repo-style dispatcher function.\n' >&2
   exit 1
 fi
+cat >"${unsafe_fixture}" <<'LUA'
+local function exec(command)
+  local weekend = weekend
+  if command then
+    command = command
+  end
+  return hl.exec_cmd(command)
+end
+hl.on("hyprland.start", function()
+  exec("unsafe-example")
+end)
+LUA
+if start_callbacks_are_safe "${unsafe_fixture}"; then
+  printf 'Startup callback guard accepted a nested dispatcher wrapper.\n' >&2
+  exit 1
+fi
+cat >"${unsafe_fixture}" <<'LUA'
+local function exec(command)
+  return hl.exec_cmd(command)
+end
+hl.on("hyprland.start", exec)
+LUA
+if start_callbacks_are_safe "${unsafe_fixture}"; then
+  printf 'Startup callback guard accepted a dispatcher function reference.\n' >&2
+  exit 1
+fi
 for unsafe_call in \
   'hl.exec_cmd("unsafe-example")' \
   'hl.dsp.exec_cmd("unsafe-example")' \
@@ -662,6 +716,6 @@ LUA
 start_callbacks_are_safe "${safe_fixture}"
 rm -rf "${callback_test_root}"
 callback_test_root=""
-printf 'ok: startup callbacks reject direct and file-scope dispatcher aliases\n'
+printf 'ok: startup callbacks reject nested, direct, and referenced dispatcher aliases\n'
 
 HYPRLAND_BIN="${HYPRLAND_BIN:-}" "${repo_dir}/tests/hyprland-lua.sh"

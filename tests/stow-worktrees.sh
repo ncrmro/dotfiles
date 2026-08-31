@@ -41,7 +41,7 @@ coreutils_shim="${test_root}/coreutils-shim"
 coreutils_shim_log="${test_root}/coreutils-shim.log"
 mkdir -p "${coreutils_shim}"
 printf '%s\n' \
-  '#!/bin/sh' \
+  '#!/usr/bin/env bash' \
   'if [ "${1-}" != --version ]; then' \
   '  printf grealpath >>"${COREUTILS_SHIM_LOG}"' \
   '  for argument do printf "\t%s" "${argument}" >>"${COREUTILS_SHIM_LOG}"; done' \
@@ -50,7 +50,7 @@ printf '%s\n' \
   "exec \"${test_realpath}\" \"\$@\"" \
   >"${coreutils_shim}/grealpath"
 printf '%s\n' \
-  '#!/bin/sh' \
+  '#!/usr/bin/env bash' \
   'if [ "${1-}" != --version ]; then' \
   '  printf gmv >>"${COREUTILS_SHIM_LOG}"' \
   '  for argument do printf "\t%s" "${argument}" >>"${COREUTILS_SHIM_LOG}"; done' \
@@ -62,14 +62,20 @@ printf '%s\n' \
   '      *,"${move_count}",*) exit 42 ;;' \
   '    esac' \
   '    if [ "${move_count}" = "${COREUTILS_SHIM_SIGNAL_MV_AT:-}" ]; then' \
-  '      kill -"${COREUTILS_SHIM_SIGNAL_NAME:-TERM}" "${PPID}"' \
+  '      if ! kill -"${COREUTILS_SHIM_SIGNAL_NAME:-TERM}" "${PPID}"; then' \
+  '        printf "failed to signal installer pid %s before mv\n" "${PPID}" >&2' \
+  '        exit 97' \
+  '      fi' \
   '      exit 143' \
   '    fi' \
   '    if [ "${move_count}" = "${COREUTILS_SHIM_SIGNAL_AFTER_MV_AT:-}" ]; then' \
   "      \"${test_mv}\" \"\$@\"" \
   '      move_status="$?"' \
   '      if [ "${move_status}" -eq 0 ]; then' \
-  '        kill -"${COREUTILS_SHIM_SIGNAL_NAME:-TERM}" "${PPID}"' \
+  '        if ! kill -"${COREUTILS_SHIM_SIGNAL_NAME:-TERM}" "${PPID}"; then' \
+  '          printf "failed to signal installer pid %s after mv\n" "${PPID}" >&2' \
+  '          exit 97' \
+  '        fi' \
   '      fi' \
   '      exit "${move_status}"' \
   '    fi' \
@@ -83,11 +89,14 @@ test_stow="$(command -v stow)"
 stow_shim="${test_root}/stow-shim"
 mkdir -p "${stow_shim}"
 printf '%s\n' \
-  '#!/bin/sh' \
+  '#!/usr/bin/env bash' \
   "\"${test_stow}\" \"\$@\"" \
   'stow_status="$?"' \
   'if [ "${stow_status}" -eq 0 ] && [ "${STOW_SHIM_SIGNAL_AFTER:-0}" = 1 ]; then' \
-  '  kill -"${STOW_SHIM_SIGNAL_NAME:-TERM}" "${PPID}"' \
+  '  if ! kill -"${STOW_SHIM_SIGNAL_NAME:-TERM}" "${PPID}"; then' \
+  '    printf "failed to signal installer pid %s after Stow\n" "${PPID}" >&2' \
+  '    exit 97' \
+  '  fi' \
   'fi' \
   'exit "${stow_status}"' \
   >"${stow_shim}/stow"
@@ -168,6 +177,34 @@ assert_check_rejected() {
   after="$(snapshot_home "${home}")"
   if [[ "${after}" != "${before}" ]]; then
     printf '%s mutated HOME during --check\n' "${why}" >&2
+    diff -u <(printf '%s\n' "${before}") <(printf '%s\n' "${after}") >&2 || true
+    exit 1
+  fi
+}
+
+assert_install_rejected() {
+  local home="$1"
+  local installer="$2"
+  local why="$3"
+  local expected_diagnostic="$4"
+  local after
+  local before
+  local output
+  shift 4
+
+  before="$(snapshot_home "${home}")"
+  if output="$(HOME="${home}" "${installer}" "$@" 2>&1)"; then
+    printf '%s was accepted by installation\n' "${why}" >&2
+    exit 1
+  fi
+  if ! grep -Fxq "${expected_diagnostic}" <<<"${output}"; then
+    printf '%s install did not report the expected diagnostic:\n%s\nActual output:\n%s\n' \
+      "${why}" "${expected_diagnostic}" "${output}" >&2
+    exit 1
+  fi
+  after="$(snapshot_home "${home}")"
+  if [[ "${after}" != "${before}" ]]; then
+    printf '%s mutated HOME during rejected installation\n' "${why}" >&2
     diff -u <(printf '%s\n' "${before}") <(printf '%s\n' "${after}") >&2 || true
     exit 1
   fi
@@ -307,6 +344,62 @@ test "$(printf '%s\n' '--adopt' '--ignore=config$' '--dotfiles')" = \
   "$(cat "${home}/.stowrc")"
 assert_check_clean "${home}" "${test_root}/canonical/install.sh" git
 printf 'ok: HOME .stowrc cannot alter the certified Stow plan\n'
+
+# An explicit empty global ignore file disables Stow's compiled-in README
+# ignore, keeping its traversal identical to preflight enumeration.
+mkdir -p "${test_root}/canonical/packages/compiled-ignore"
+printf 'must be stowed\n' \
+  >"${test_root}/canonical/packages/compiled-ignore/README.md"
+home="$(new_home compiled-ignore)"
+HOME="${home}" "${test_root}/canonical/install.sh" compiled-ignore
+assert_target \
+  "${home}/README.md" \
+  "${test_root}/canonical/packages/compiled-ignore/README.md"
+assert_check_clean \
+  "${home}" "${test_root}/canonical/install.sh" compiled-ignore
+
+# Package-local ignores, empty directories, and special entries are rejected
+# before an otherwise-valid owned link can be retargeted.
+mkdir -p "${test_root}/canonical/packages/local-ignore/.config"
+printf 'ignored$\n' \
+  >"${test_root}/canonical/packages/local-ignore/.stow-local-ignore"
+printf 'payload\n' \
+  >"${test_root}/canonical/packages/local-ignore/.config/payload"
+mkdir -p "${test_root}/canonical/packages/empty-entry/.config/empty"
+mkdir -p "${test_root}/canonical/packages/special-entry/.config"
+mkfifo "${test_root}/canonical/packages/special-entry/.config/socket-like"
+for invalid_case in \
+  'local-ignore:.stow-local-ignore' \
+  'empty-entry:.config/empty' \
+  'special-entry:.config/socket-like'; do
+  invalid_package="${invalid_case%%:*}"
+  invalid_relative="${invalid_case#*:}"
+  invalid_path="${test_root}/canonical/packages/${invalid_package}/${invalid_relative}"
+  case "${invalid_package}" in
+    local-ignore)
+      invalid_diagnostic="Selected package must not contain .stow-local-ignore: ${invalid_path}"
+      ;;
+    empty-entry)
+      invalid_diagnostic="Package tree contains an empty directory: ${invalid_path}"
+      ;;
+    special-entry)
+      invalid_diagnostic="Package tree contains an unsupported entry type: ${invalid_path}"
+      ;;
+  esac
+  home="$(new_home "invalid-${invalid_package}")"
+  mkdir -p "${home}/.config/git"
+  ln -s "${test_root}/canonical/packages/git/.config/git/config" \
+    "${home}/.config/git/config"
+  invalid_link_before="$(readlink "${home}/.config/git/config")"
+  assert_check_rejected \
+    "${home}" "${test_root}/canonical/install.sh" "${invalid_package}" \
+    "${invalid_diagnostic}" git "${invalid_package}"
+  assert_install_rejected \
+    "${home}" "${test_root}/canonical/install.sh" "${invalid_package}" \
+    "${invalid_diagnostic}" git "${invalid_package}"
+  test "$(readlink "${home}/.config/git/config")" = "${invalid_link_before}"
+done
+printf 'ok: Stow ignores and unsupported entries cannot escape preflight\n'
 
 # A link that resolves correctly but has absolute spelling still needs an
 # explicit transition before Stow can accept it.
