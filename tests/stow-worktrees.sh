@@ -3,6 +3,7 @@ set -euo pipefail
 
 repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 test_root="$(mktemp -d "${TMPDIR:-/tmp}/dotfiles-stow-worktrees.XXXXXXXXXX")"
+test_root="$(cd "${test_root}" && pwd -P)"
 trap 'rm -rf "${test_root}"' EXIT
 
 git clone -q --no-hardlinks "${repo_dir}" "${test_root}/canonical"
@@ -55,9 +56,15 @@ printf '%s\n' \
   '  for argument do printf "\t%s" "${argument}" >>"${COREUTILS_SHIM_LOG}"; done' \
   '  printf "\n" >>"${COREUTILS_SHIM_LOG}"' \
   '  if [ "${COREUTILS_SHIM_FAIL_MV:-0}" = 1 ]; then exit 42; fi' \
-  '  if [ -n "${COREUTILS_SHIM_FAIL_MV_AT:-}" ]; then' \
+  '  if [ -n "${COREUTILS_SHIM_FAIL_MV_AT:-}${COREUTILS_SHIM_SIGNAL_MV_AT:-}" ]; then' \
   '    move_count="$(grep -c "^gmv" "${COREUTILS_SHIM_LOG}")"' \
-  '    if [ "${move_count}" = "${COREUTILS_SHIM_FAIL_MV_AT}" ]; then exit 42; fi' \
+  '    case ",${COREUTILS_SHIM_FAIL_MV_AT:-}," in' \
+  '      *,"${move_count}",*) exit 42 ;;' \
+  '    esac' \
+  '    if [ "${move_count}" = "${COREUTILS_SHIM_SIGNAL_MV_AT:-}" ]; then' \
+  '      kill -"${COREUTILS_SHIM_SIGNAL_NAME:-TERM}" "${PPID}"' \
+  '      exit 143' \
+  '    fi' \
   '  fi' \
   'fi' \
   "exec \"${test_mv}\" \"\$@\"" \
@@ -147,13 +154,50 @@ assert_check_rejected() {
 assert_check_clean() {
   local home="$1"
   local installer="$2"
+  local after
+  local before
   local output
   shift 2
 
+  before="$(snapshot_home "${home}")"
   output="$(HOME="${home}" "${installer}" --check "$@")"
   if [[ -n "${output}" ]]; then
     printf 'Clean preflight reported unexpected retarget drift:\n%s\n' \
       "${output}" >&2
+    exit 1
+  fi
+  after="$(snapshot_home "${home}")"
+  if [[ "${after}" != "${before}" ]]; then
+    printf 'Clean preflight mutated HOME.\n' >&2
+    diff -u <(printf '%s\n' "${before}") <(printf '%s\n' "${after}") >&2 || true
+    exit 1
+  fi
+  if find "${home}" -name '*.dotfiles-retarget.*' -print | grep -q .; then
+    printf 'Clean preflight left a temporary retarget artifact.\n' >&2
+    exit 1
+  fi
+}
+
+assert_check_plans() {
+  local home="$1"
+  local installer="$2"
+  local expected="$3"
+  local after
+  local before
+  local output
+  shift 3
+
+  before="$(snapshot_home "${home}")"
+  output="$(HOME="${home}" "${installer}" --check "$@")"
+  grep -Fxq "${expected}" <<<"${output}"
+  after="$(snapshot_home "${home}")"
+  if [[ "${after}" != "${before}" ]]; then
+    printf 'Pending-retarget preflight mutated HOME.\n' >&2
+    diff -u <(printf '%s\n' "${before}") <(printf '%s\n' "${after}") >&2 || true
+    exit 1
+  fi
+  if find "${home}" -name '*.dotfiles-retarget.*' -print | grep -q .; then
+    printf 'Pending-retarget preflight left a temporary retarget artifact.\n' >&2
     exit 1
   fi
 }
@@ -163,7 +207,7 @@ new_home() {
   local home="${test_root}/homes/${name}"
 
   mkdir -p "${home}"
-  printf '%s\n' "${home}"
+  (cd "${home}" && pwd -P)
 }
 
 nested_installer_dir="${test_root}/canonical/nested-installer"
@@ -227,6 +271,21 @@ assert_target \
   "${test_root}/canonical/packages/git/.config/git/config"
 assert_check_clean "${home}" "${test_root}/canonical/install.sh" git
 
+# User resource options cannot alter the already-certified Stow invocation.
+home="$(new_home hostile-stowrc)"
+printf '%s\n' '--adopt' '--ignore=config$' '--dotfiles' >"${home}/.stowrc"
+source_before="$(cksum <"${test_root}/canonical/packages/git/.config/git/config")"
+HOME="${home}" "${test_root}/canonical/install.sh" git
+assert_target \
+  "${home}/.config/git/config" \
+  "${test_root}/canonical/packages/git/.config/git/config"
+test "$(cksum <"${test_root}/canonical/packages/git/.config/git/config")" = \
+  "${source_before}"
+test "$(printf '%s\n' '--adopt' '--ignore=config$' '--dotfiles')" = \
+  "$(cat "${home}/.stowrc")"
+assert_check_clean "${home}" "${test_root}/canonical/install.sh" git
+printf 'ok: HOME .stowrc cannot alter the certified Stow plan\n'
+
 # A link that resolves correctly but has absolute spelling still needs an
 # explicit transition before Stow can accept it.
 home="$(new_home absolute-link)"
@@ -236,12 +295,9 @@ ln -s "${absolute_source}" "${home}/.config/git/config"
 absolute_expected_link="$(
   "${test_realpath}" -m --relative-to="${home}/.config/git" "${absolute_source}"
 )"
-absolute_check_output="$(
-  HOME="${home}" "${test_root}/canonical/install.sh" --check git
-)"
-grep -Fxq \
-  "Would retarget: ${home}/.config/git/config -> ${absolute_expected_link}" \
-  <<<"${absolute_check_output}"
+assert_check_plans \
+  "${home}" "${test_root}/canonical/install.sh" \
+  "Would retarget: ${home}/.config/git/config -> ${absolute_expected_link}" git
 test "$(readlink "${home}/.config/git/config")" = "${absolute_source}"
 HOME="${home}" "${test_root}/canonical/install.sh" git
 test "$(readlink "${home}/.config/git/config")" = "${absolute_expected_link}"
@@ -268,7 +324,13 @@ printf 'ok: absolute owned links are planned without partial mutation\n'
 # canonical -> worktree: check is non-mutating, install atomically retargets.
 home="${transitions_home}"
 before="$(readlink "${home}/.config/git/config")"
-HOME="${home}" "${test_root}/sibling/install.sh" --check git
+pending_relative="$(
+  "${test_realpath}" -m --relative-to="${home}/.config/git" \
+    "${test_root}/sibling/packages/git/.config/git/config"
+)"
+assert_check_plans \
+  "${home}" "${test_root}/sibling/install.sh" \
+  "Would retarget: ${home}/.config/git/config -> ${pending_relative}" git
 test "$(readlink "${home}/.config/git/config")" = "${before}"
 : >"${coreutils_shim_log}"
 COREUTILS_SHIM_LOG="${coreutils_shim_log}" \
@@ -329,10 +391,85 @@ fi
 assert_check_clean "${home}" "${test_root}/canonical/install.sh" git ssh
 printf 'ok: second-move failure rolls back the earlier retarget\n'
 
+# INT and TERM delivered during the second move both roll back the first move.
+for signal_case in INT:130 TERM:143; do
+  signal_name="${signal_case%%:*}"
+  expected_signal_status="${signal_case##*:}"
+  home="$(new_home "signaled-${signal_name}-retarget-rollback")"
+  HOME="${home}" "${test_root}/canonical/install.sh" git ssh
+  git_before="$(readlink "${home}/.config/git/config")"
+  ssh_before="$(readlink "${home}/.ssh/config")"
+  : >"${coreutils_shim_log}"
+  if signal_output="$(
+    COREUTILS_SHIM_SIGNAL_MV_AT=2 \
+    COREUTILS_SHIM_SIGNAL_NAME="${signal_name}" \
+    COREUTILS_SHIM_LOG="${coreutils_shim_log}" \
+    PATH="${coreutils_shim}:${PATH}" \
+    HOME="${home}" \
+    "${test_root}/sibling/install.sh" git ssh 2>&1
+  )"; then
+    printf 'injected %s during the second GNU mv was accepted\n' \
+      "${signal_name}" >&2
+    exit 1
+  else
+    signal_status=$?
+  fi
+  test "${signal_status}" -eq "${expected_signal_status}"
+  grep -Fxq \
+    "Interrupted by ${signal_name}; rolling back 1 committed retarget(s)." \
+    <<<"${signal_output}"
+  test "$(readlink "${home}/.config/git/config")" = "${git_before}"
+  test "$(readlink "${home}/.ssh/config")" = "${ssh_before}"
+  test "$(grep -c '^gmv' "${coreutils_shim_log}")" -eq 3
+  assert_check_clean "${home}" "${test_root}/canonical/install.sh" git ssh
+done
+printf 'ok: INT and TERM during a retarget batch roll back committed moves\n'
+
+# If both the second move and rollback move fail, report the exact mixed state.
+home="$(new_home failed-retarget-rollback)"
+HOME="${home}" "${test_root}/canonical/install.sh" git ssh
+git_before="$(readlink "${home}/.config/git/config")"
+ssh_before="$(readlink "${home}/.ssh/config")"
+: >"${coreutils_shim_log}"
+if rollback_failure_output="$(
+  COREUTILS_SHIM_FAIL_MV_AT=2,3 \
+  COREUTILS_SHIM_LOG="${coreutils_shim_log}" \
+  PATH="${coreutils_shim}:${PATH}" \
+  HOME="${home}" \
+  "${test_root}/sibling/install.sh" git ssh 2>&1
+)"; then
+  printf 'injected move and rollback failures were accepted\n' >&2
+  exit 1
+fi
+grep -Fxq \
+  "Failed to retarget link: ${home}/.ssh/config; rolling back 1 earlier link(s)." \
+  <<<"${rollback_failure_output}"
+grep -Fxq "Rollback failed for retargeted link: ${home}/.config/git/config" \
+  <<<"${rollback_failure_output}"
+grep -Fxq 'Retarget rollback was incomplete; inspect the reported links.' \
+  <<<"${rollback_failure_output}"
+test "$(readlink "${home}/.config/git/config")" != "${git_before}"
+assert_target \
+  "${home}/.config/git/config" \
+  "${test_root}/sibling/packages/git/.config/git/config"
+test "$(readlink "${home}/.ssh/config")" = "${ssh_before}"
+test "$(grep -c '^gmv' "${coreutils_shim_log}")" -eq 3
+if find "${home}" -name '*.dotfiles-retarget.*' -print | grep -q .; then
+  printf 'failed rollback left a temporary retarget artifact\n' >&2
+  exit 1
+fi
+printf 'ok: rollback failure reports and preserves the exact mixed link state\n'
+
 # Unchanged links are accepted, then worktree -> canonical is symmetric.
 home="${transitions_home}"
-HOME="${home}" "${test_root}/sibling/install.sh" --check git
-HOME="${home}" "${test_root}/canonical/install.sh" --check git
+assert_check_clean "${home}" "${test_root}/sibling/install.sh" git
+pending_relative="$(
+  "${test_realpath}" -m --relative-to="${home}/.config/git" \
+    "${test_root}/canonical/packages/git/.config/git/config"
+)"
+assert_check_plans \
+  "${home}" "${test_root}/canonical/install.sh" \
+  "Would retarget: ${home}/.config/git/config -> ${pending_relative}" git
 HOME="${home}" "${test_root}/canonical/install.sh" git
 assert_target \
   "${home}/.config/git/config" \
@@ -420,6 +557,28 @@ assert_check_rejected \
   "${home}" "${test_root}/canonical/install.sh" "duplicate target" \
   "Duplicate target: ${home}/.config/git/config (${test_root}/canonical/packages/git/.config/git/config and ${test_root}/canonical/packages/duplicate-git/.config/git/config)" \
   git duplicate-git
+
+# Package-owned symlink entries are rejected identically by check and install.
+mkdir -p "${test_root}/canonical/packages/symlink-source/.config"
+ln -s ../../git/.config/git/config \
+  "${test_root}/canonical/packages/symlink-source/.config/source-link"
+home="$(new_home symlink-source)"
+symlink_diagnostic="Package source symlinks are unsupported: ${test_root}/canonical/packages/symlink-source/.config/source-link"
+assert_check_rejected \
+  "${home}" "${test_root}/canonical/install.sh" "package source symlink" \
+  "${symlink_diagnostic}" symlink-source
+if symlink_install_output="$(
+  HOME="${home}" "${test_root}/canonical/install.sh" symlink-source 2>&1
+)"; then
+  printf 'package source symlink was accepted by installation\n' >&2
+  exit 1
+fi
+grep -Fxq "${symlink_diagnostic}" <<<"${symlink_install_output}"
+assert_check_rejected \
+  "${home}" "${test_root}/canonical/install.sh" \
+  "repeated package source symlink" "${symlink_diagnostic}" symlink-source
+test -z "$(snapshot_home "${home}")"
+printf 'ok: package source symlink rejection is stable and non-mutating\n'
 
 # Cross-package leaf/parent overlap reaches the installer's dedicated branch.
 mkdir -p \

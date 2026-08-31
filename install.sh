@@ -36,6 +36,9 @@ if ! mv_bin="$(select_gnu_coreutil mv)"; then
 fi
 home_dir="$("${realpath_bin}" -m -- "${HOME}")"
 retarget_temporary=""
+retarget_batch_active=false
+retarget_committed=0
+stow_control_dir=""
 
 cleanup_retarget_temporary() {
   if [[ -n "${retarget_temporary}" && -L "${retarget_temporary}" ]]; then
@@ -44,16 +47,36 @@ cleanup_retarget_temporary() {
   retarget_temporary=""
 }
 
+cleanup_installer() {
+  cleanup_retarget_temporary
+  if [[ -n "${stow_control_dir}" && -d "${stow_control_dir}" ]]; then
+    rm -rf "${stow_control_dir}"
+  fi
+  stow_control_dir=""
+}
+
 exit_for_signal() {
   local status="$1"
+  local signal_name="$2"
+
+  trap - HUP INT TERM
+  cleanup_retarget_temporary
+  if [[ "${retarget_batch_active}" == true && "${retarget_committed}" -gt 0 ]]; then
+    retarget_batch_active=false
+    printf 'Interrupted by %s; rolling back %d committed retarget(s).\n' \
+      "${signal_name}" "${retarget_committed}" >&2
+    if ! rollback_retargets "$((retarget_committed - 1))"; then
+      printf 'Interrupt rollback was incomplete; inspect the reported links.\n' >&2
+    fi
+  fi
 
   exit "${status}"
 }
 
-trap cleanup_retarget_temporary EXIT
-trap 'exit_for_signal 129' HUP
-trap 'exit_for_signal 130' INT
-trap 'exit_for_signal 143' TERM
+trap cleanup_installer EXIT
+trap 'exit_for_signal 129 HUP' HUP
+trap 'exit_for_signal 130 INT' INT
+trap 'exit_for_signal 143 TERM' TERM
 
 check=false
 if [[ "${1:-}" == "--check" ]]; then
@@ -256,6 +279,10 @@ expected_relatives=()
 for package in "${selected[@]}"; do
   package_dir="${packages_dir}/${package}"
   while IFS= read -r -d '' source; do
+    if [[ -L "${source}" ]]; then
+      printf 'Package source symlinks are unsupported: %s\n' "${source}" >&2
+      exit 1
+    fi
     relative="${source#"${package_dir}/"}"
     target="${home_dir}/${relative}"
     expected_relative="${source#"${repo_top}/"}"
@@ -333,8 +360,10 @@ fi
 
 # No link is changed until every selected package, target, and parent passes.
 # If an atomic move fails, restore every link moved earlier in this batch.
+retarget_batch_active=true
 for ((i = 0; i < ${#retarget_targets[@]}; i++)); do
   if ! retarget_link "${retarget_targets[i]}" "${retarget_expecteds[i]}"; then
+    retarget_batch_active=false
     printf 'Failed to retarget link: %s; rolling back %d earlier link(s).\n' \
       "${retarget_targets[i]}" "${i}" >&2
     if ! rollback_retargets "$((i - 1))"; then
@@ -342,6 +371,17 @@ for ((i = 0; i < ${#retarget_targets[@]}; i++)); do
     fi
     exit 1
   fi
+  retarget_committed=$((retarget_committed + 1))
 done
+retarget_batch_active=false
 
-stow "${stow_args[@]}" "${selected[@]}"
+# Stow reads both $PWD/.stowrc and $HOME/.stowrc. Run it from an empty,
+# disposable directory with a controlled HOME so only the validated arguments
+# can affect the certified plan.
+stow_control_dir="$(
+  mktemp -d "${TMPDIR:-/tmp}/dotfiles-stow-control.XXXXXXXXXX"
+)"
+(
+  cd "${stow_control_dir}"
+  HOME="${stow_control_dir}" stow "${stow_args[@]}" "${selected[@]}"
+)

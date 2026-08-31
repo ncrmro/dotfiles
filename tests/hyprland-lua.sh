@@ -13,6 +13,7 @@ else
   hyprland_bin="${hyprland_out}/bin/Hyprland"
 fi
 test_root="$(mktemp -d "${TMPDIR:-/tmp}/dotfiles-hyprland-lua.XXXXXXXXXX")"
+test_root="$(cd "${test_root}" && pwd -P)"
 trap 'rm -rf "${test_root}"' EXIT
 
 refute() {

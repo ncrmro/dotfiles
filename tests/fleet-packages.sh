@@ -3,6 +3,7 @@ set -euo pipefail
 
 repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 test_root="$(mktemp -d "${TMPDIR:-/tmp}/dotfiles-fleet-packages.XXXXXXXXXX")"
+test_root="$(cd "${test_root}" && pwd -P)"
 socket_test_root=""
 socket_agent_pid=""
 callback_test_root=""
@@ -72,6 +73,28 @@ refute() {
     return 1
   fi
   return 0
+}
+
+snapshot_tree() {
+  local root="$1"
+  local path
+
+  (
+    cd "${root}"
+    while IFS= read -r path; do
+      [[ "${path}" == . ]] && continue
+      if [[ -L "${path}" ]]; then
+        printf 'link %s -> %s\n' "${path}" "$(readlink "${path}")"
+      elif [[ -f "${path}" ]]; then
+        printf 'file %s ' "${path}"
+        cksum <"${path}"
+      elif [[ -d "${path}" ]]; then
+        printf 'directory %s\n' "${path}"
+      else
+        printf 'other %s\n' "${path}"
+      fi
+    done < <(find . -print | LC_ALL=C sort)
+  )
 }
 
 select_test_gnu_coreutil() {
@@ -166,7 +189,22 @@ for composition in "${compositions[@]}"; do
   done
 
   HOME="${test_home}" "${stow_root}/install.sh" "${packages[@]}"
-  HOME="${test_home}" "${stow_root}/install.sh" --check "${packages[@]}"
+  host_check_before="$(snapshot_tree "${test_home}")"
+  host_check_output="$(
+    HOME="${test_home}" "${stow_root}/install.sh" --check "${packages[@]}"
+  )"
+  host_check_after="$(snapshot_tree "${test_home}")"
+  if [[ -n "${host_check_output}" ]]; then
+    printf 'Host %s retained retarget drift after installation:\n%s\n' \
+      "${host}" "${host_check_output}" >&2
+    exit 1
+  fi
+  if [[ "${host_check_after}" != "${host_check_before}" ]]; then
+    printf 'Host %s preflight mutated its installed HOME.\n' "${host}" >&2
+    exit 1
+  fi
+  assert_find_empty 'host preflight left a temporary retarget artifact' \
+    "${test_home}" -name '*.dotfiles-retarget.*'
 
   if [[ " ${packages[*]} " == *" omarchy "* ]]; then
     shell_config="${test_home}/.config/omarchy/shell.json"

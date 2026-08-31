@@ -26,9 +26,16 @@ if grep -Eq 'match\([^)]*,[^)]*,' "${repo_dir}/tests/fleet-packages.sh"; then
   printf 'Fleet tests contain a non-portable three-argument awk match.\n' >&2
   exit 1
 fi
-if grep -En 'm[a]pfile|read[a]rray|-p[r]intf|[(]realp[a]th[[:space:]]|sha256s[u]m|sort -[z]|-print[0]|mktemp[[:space:]]+-d[)]' \
-  "${repo_dir}"/tests/*.sh; then
-  printf 'Tests contain an unselected GNU command or a Bash-newer-than-3.2 primitive.\n' >&2
+portability_files=("${repo_dir}/install.sh" "${repo_dir}"/tests/*.sh)
+if grep -En 'm[a]pfile|read[a]rray|-p[r]intf|[(]realp[a]th[[:space:]]|sha256s[u]m|sort -[z]|mktemp[[:space:]]+-d[)]' \
+  "${portability_files[@]}"; then
+  printf 'Installer/tests contain an unselected GNU command or a Bash-newer-than-3.2 primitive.\n' >&2
+  exit 1
+fi
+# install.sh intentionally pairs find's null-delimited output with Bash 3.2
+# read -d; GNU and macOS/BSD find both support it. Tests should not add it.
+if grep -En -- '-print[0]' "${repo_dir}"/tests/*.sh; then
+  printf 'Tests contain an unnecessary null-delimited find traversal.\n' >&2
   exit 1
 fi
 
