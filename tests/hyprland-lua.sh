@@ -63,8 +63,20 @@ grep -Fq 'Hyprland 0.56.0 ' <<<"${version_output}" \
   exit 1
 }
 
-grep -Fqx 'hl.bind(mod .. " + Space", exec(app .. "walker"))' \
-  "${repo_dir}/packages/hyprland-common/.config/hypr/hyprland.lua"
+hyprland_lua="${repo_dir}/packages/hyprland-common/.config/hypr/hyprland.lua"
+grep -Fqx 'hl.bind(mod .. " + Space", exec(app .. "omarchy-menu toggle"))' \
+  "${hyprland_lua}"
+grep -Fqx 'hl.bind(mod .. " + ALT + Space", exec(app .. "omarchy-menu toggle apps"))' \
+  "${hyprland_lua}"
+grep -Fqx 'hl.bind(mod .. " + Escape", exec(app .. "omarchy-menu toggle system"))' \
+  "${hyprland_lua}"
+grep -Fqx 'hl.bind("XF86PowerOff", exec(app .. "omarchy-menu toggle system"), { locked = true })' \
+  "${hyprland_lua}"
+grep -Fqx 'hl.bind(mod .. " + CTRL + E", exec(app .. "walker -m symbols"))' \
+  "${hyprland_lua}"
+refute 'primary menu bindings must not launch Walker or Wofi' \
+  -E 'hl\.bind\(.*(Space|Escape|XF86PowerOff).*(walker|wofi)' \
+  "${hyprland_lua}"
 
 verify_config() {
   local test_home="$1"

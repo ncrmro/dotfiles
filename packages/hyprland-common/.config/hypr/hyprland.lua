@@ -60,10 +60,11 @@ local function exec(command)
 end
 
 hl.bind(mod .. " + Return", exec(app .. "ghostty"))
-hl.bind(mod .. " + Space", exec(app .. "walker"))
+hl.bind(mod .. " + Space", exec(app .. "omarchy-menu toggle"))
+hl.bind(mod .. " + ALT + Space", exec(app .. "omarchy-menu toggle apps"))
 hl.bind(mod .. " + B", exec(app .. "chromium --new-window --ozone-platform=wayland"))
 hl.bind(mod .. " + E", exec(app .. "nautilus --new-window"))
-hl.bind(mod .. " + Escape", exec(app .. "keystone-menu system"))
+hl.bind(mod .. " + Escape", exec(app .. "omarchy-menu toggle system"))
 hl.bind(mod .. " + K", exec(app .. "keystone-menu-keybindings"))
 
 local protected_browser_classes = {
@@ -192,7 +193,7 @@ hl.bind("XF86AudioNext", exec("playerctl next"), { locked = true })
 hl.bind("XF86AudioPause", exec("playerctl play-pause"), { locked = true })
 hl.bind("XF86AudioPlay", exec("playerctl play-pause"), { locked = true })
 hl.bind("XF86AudioPrev", exec("playerctl previous"), { locked = true })
-hl.bind("XF86PowerOff", exec(app .. "keystone-menu system"), { locked = true })
+hl.bind("XF86PowerOff", exec(app .. "omarchy-menu toggle system"), { locked = true })
 hl.bind("switch:on:Lid Switch", exec("keystone-suspend --lid"), { locked = true })
 hl.bind("switch:off:Lid Switch", function()
   -- Delay DPMS for 500 ms so Hyprland 0.56 can finish the lid switch callback.
