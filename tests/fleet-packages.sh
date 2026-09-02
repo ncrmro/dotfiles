@@ -392,9 +392,11 @@ grep -Fq 'hl.bind(mod .. " + H", hl.dsp.focus({ direction = "left" }))' "${hyprl
 grep -Fq 'hl.bind(mod .. " + L", hl.dsp.focus({ direction = "right" }))' "${hyprland_lua}"
 for graphical_command in \
   'ghostty' \
+  'omarchy-menu toggle' \
+  'omarchy-menu toggle apps' \
   'chromium --new-window --ozone-platform=wayland' \
   'nautilus --new-window' \
-  'keystone-menu system' \
+  'omarchy-menu toggle system' \
   'keystone-menu-keybindings' \
   'ghostty --class clipse -e clipse' \
   'walker -m symbols' \
