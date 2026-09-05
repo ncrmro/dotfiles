@@ -10,6 +10,9 @@
 [push]
 	autoSetupRemote = true
 
+; Keep gpgsign on. A "failed to write commit object" or signing error almost
+; always means the ssh agent has no unlocked key, not that signing is broken:
+; check `ssh-add -l` and unlock instead of setting this to false.
 [commit]
 	gpgsign = true
 
@@ -36,3 +39,5 @@
 
 [includeIf "gitdir:~/code/unsupervised/"]
 	path = ~/code/unsupervised/.gitconfig
+[credential "https://github.com"]
+	helper = !gh auth git-credential
