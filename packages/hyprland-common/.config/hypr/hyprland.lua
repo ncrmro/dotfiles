@@ -221,11 +221,6 @@ window_rule("chromium-pwa-opacity", { class = "^(chrome-.*-Default)$" }, { opaci
 window_rule("youtube-pwa-opacity", { class = "^(chrome-youtube.*-Default)$" }, { opacity = "1 1" })
 window_rule("media-opacity", { class = "^(zoom|vlc|org.kde.kdenlive|com.obsproject.Studio)$" }, { opacity = "1 1" })
 window_rule("games-opacity", { class = "^(com.libretro.RetroArch|steam)$" }, { opacity = "1 1" })
-window_rule("unreal-plugins-dialog", { class = "^(UnrealEditor)$", title = "^(Plugins)$" }, {
-  float = true,
-  center = true,
-  size = "2300 1700",
-})
 window_rule("clipse-float", { class = "(clipse)" }, { float = true, size = "622 652" })
 window_rule("notes-inbox", { class = "^(com.mitchellh.ghostty)$", title = "^(keystone-notes-inbox)$" }, { float = true, center = true, size = "1000 700" })
 window_rule("polkit-dialog", { class = "^$", title = "^(Authentication required)$" }, {
