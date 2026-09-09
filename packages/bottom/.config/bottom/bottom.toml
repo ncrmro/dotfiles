@@ -1,0 +1,4 @@
+[flags]
+# Show cache/buffer memory and subtract reclaimable ZFS ARC from used memory.
+enable_cache_memory = true
+free_arc = true
