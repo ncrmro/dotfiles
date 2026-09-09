@@ -344,6 +344,12 @@ if grep -Fq '/home/ncrmro' "${zsh_env}" "${zsh_rc}"; then
   exit 1
 fi
 grep -Fxq '  before_sleep_cmd=keystone-lock' "${hypridle_conf}"
+grep -Fxq '  ignore_dbus_inhibit=true' "${hypridle_conf}"
+grep -Fxq '  ignore_systemd_inhibit=true' "${hypridle_conf}"
+if [[ "$(grep -Fxc '  ignore_inhibit=true' "${hypridle_conf}")" -ne 2 ]]; then
+  printf 'FAIL: both hypridle listeners must ignore application inhibitors\n' >&2
+  exit 1
+fi
 grep -Fxq '  inhibit_sleep=3' "${hypridle_conf}"
 grep -Fxq '  lock_cmd=keystone-lock' "${hypridle_conf}"
 grep -Fxq '  on-timeout=keystone-lock' "${hypridle_conf}"
@@ -378,6 +384,8 @@ refute 'lock state must come from the compositor, not pidof' \
   -F 'pidof hyprlock' "${hypridle_conf}" "${hyprland_lua}"
 refute 'runtime lock hooks must not tear down the session' \
   -F -- '--fail-closed' "${hypridle_conf}"
+refute 'Stay Awake must only be exposed through the system menu' \
+  -F 'keystone-idle-toggle' "${hyprland_lua}"
 printf 'ok: lock hooks\n'
 
 grep -Fq 'local theme, load_error = loadfile(theme_path)' "${hyprland_lua}"
