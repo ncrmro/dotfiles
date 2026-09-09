@@ -179,7 +179,6 @@ hl.bind(mod .. " + CTRL + SHIFT + N", exec("makoctl mode -t do-not-disturb"))
 hl.bind("Print", exec(app .. "keystone-screenshot"))
 hl.bind("SHIFT + Print", exec(app .. "keystone-screenshot smart clipboard"))
 hl.bind(mod .. " + Print", exec(app .. "hyprpicker -a"))
-hl.bind(mod .. " + CTRL + I", exec("keystone-idle-toggle"))
 hl.bind(mod .. " + CTRL + N", exec("keystone-nightlight-toggle"))
 hl.bind(mod .. " + slash", exec(app .. "keystone-window-switch"))
 
