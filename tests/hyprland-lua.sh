@@ -133,12 +133,13 @@ for host_package in "${host_packages[@]}"; do
 done
 printf 'ok: %d valid Hyprland host-theme compositions\n' "${verified_compositions}"
 
-workstation_host="${repo_dir}/packages/hyprland-workstation/.config/hypr/host.lua"
-tr -d '[:space:]' <"${workstation_host}" | grep -Fq \
-  'hl.window_rule({name="ableton-bounded-float",match={class="^(abletonlive12suite[.]exe)$"},float=true,center=true,size="13822068",})'
-refute 'Ableton workaround must remain workstation-specific' \
-  -F 'ableton live 12 suite' "${hyprland_lua}"
-printf 'ok: Ableton has a workstation-only bounded float rule\n'
+refute 'Ableton must remain layout-managed without special window rules' \
+  -Ri 'ableton' \
+  "${repo_dir}/packages/hyprland-common/.config/hypr" \
+  "${repo_dir}/packages/hyprland-laptop/.config/hypr" \
+  "${repo_dir}/packages/hyprland-delltop/.config/hypr" \
+  "${repo_dir}/packages/hyprland-workstation/.config/hypr"
+printf 'ok: Ableton has no special Hyprland window rules\n'
 
 test_home="${test_root}/negative/home"
 runtime_dir="${test_root}/negative/runtime"
