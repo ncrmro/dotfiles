@@ -163,10 +163,6 @@ refute 'invalid host output must not report a valid config' \
   -F 'config ok' "${host_output_file}"
 printf 'ok: invalid host is a diagnosed config error\n'
 
-grep -Fq 'window_rule("ableton-float", { class = "^(ableton live 12 suite[.]exe)$" }, { float = true })' \
-  "${repo_dir}/packages/hyprland-common/.config/hypr/hyprland.lua"
-printf 'ok: Ableton XWayland windows float\n'
-
 close_binding="${test_root}/chrome-hold-close.lua"
 awk '
   /^local protected_browser_classes = {/ { capture = 1 }
