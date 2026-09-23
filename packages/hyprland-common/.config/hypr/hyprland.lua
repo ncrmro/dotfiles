@@ -62,14 +62,12 @@ end
 hl.bind(mod .. " + Return", exec(app .. "ghostty"))
 hl.bind(mod .. " + Space", exec(app .. "omarchy-menu toggle"))
 hl.bind(mod .. " + ALT + Space", exec(app .. "omarchy-menu toggle apps"))
-hl.bind(mod .. " + B", exec(app .. "chromium --new-window --ozone-platform=wayland"))
+hl.bind(mod .. " + B", exec(app .. "google-chrome-stable --new-window --ozone-platform=wayland"))
 hl.bind(mod .. " + E", exec(app .. "nautilus --new-window"))
 hl.bind(mod .. " + Escape", exec(app .. "omarchy-menu toggle system"))
 hl.bind(mod .. " + K", exec(app .. "keystone-menu-keybindings"))
 
 local protected_browser_classes = {
-  ["chromium"] = true,
-  ["chromium-browser"] = true,
   ["google-chrome"] = true,
   ["google-chrome-beta"] = true,
   ["google-chrome-dev"] = true,
@@ -211,12 +209,11 @@ local function window_rule(name, match, effects)
   hl.window_rule(effects)
 end
 
-window_rule("chromium-tile", { class = "^(chromium)$" }, { tile = true })
 window_rule("settings-float", { class = "^(org.pulseaudio.pavucontrol|.blueman-manager-wrapped|blueman-manager)$" }, { float = true })
 window_rule("default-opacity", { class = ".*" }, { opacity = "0.97 0.9" })
-window_rule("youtube-opacity", { class = "^(chromium|google-chrome|google-chrome-unstable)$", title = ".*Youtube.*" }, { opacity = "1 1" })
-window_rule("chromium-opacity", { class = "^(chromium|google-chrome|google-chrome-unstable)$" }, { opacity = "1 0.97" })
-window_rule("chromium-pwa-opacity", { class = "^(chrome-.*-Default)$" }, { opacity = "0.97 0.9" })
+window_rule("youtube-opacity", { class = "^(google-chrome|google-chrome-unstable)$", title = ".*Youtube.*" }, { opacity = "1 1" })
+window_rule("browser-opacity", { class = "^(google-chrome|google-chrome-unstable)$" }, { opacity = "1 0.97" })
+window_rule("chrome-pwa-opacity", { class = "^(chrome-.*-Default)$" }, { opacity = "0.97 0.9" })
 window_rule("youtube-pwa-opacity", { class = "^(chrome-youtube.*-Default)$" }, { opacity = "1 1" })
 window_rule("media-opacity", { class = "^(zoom|vlc|org.kde.kdenlive|com.obsproject.Studio)$" }, { opacity = "1 1" })
 window_rule("games-opacity", { class = "^(com.libretro.RetroArch|steam)$" }, { opacity = "1 1" })
