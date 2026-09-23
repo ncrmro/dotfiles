@@ -388,15 +388,71 @@ if [[ "${broken}" -ne 0 ]]; then
   exit "${broken}"
 fi
 
+# Stow cannot unstow a link after its source file has been deleted. Find only
+# links whose HOME-relative path matches a missing source in a selected package
+# of this Git checkout (including its registered worktrees).
+worktree_roots=()
+while IFS= read -r line; do
+  if [[ "${line}" == worktree\ * ]]; then
+    worktree_roots+=("${line#worktree }")
+  fi
+done < <(git -C "${repo_top}" worktree list --porcelain)
+
+search_roots=()
+for target in "${targets[@]}"; do
+  relative="${target#"${home_dir}/"}"
+  first="${relative%%/*}"
+  remainder="${relative#*/}"
+  if [[ "${remainder}" == */* ]]; then
+    second="${remainder%%/*}"
+    search_root="${home_dir}/${first}/${second}"
+  else
+    search_root="${home_dir}/${first}"
+  fi
+  already_seen=false
+  for root in "${search_roots[@]}"; do
+    if [[ "${root}" == "${search_root}" ]]; then
+      already_seen=true
+      break
+    fi
+  done
+  if [[ "${already_seen}" == false ]]; then
+    search_roots+=("${search_root}")
+  fi
+done
+
+obsolete_links=()
+obsolete_values=()
+for search_root in "${search_roots[@]}"; do
+  [[ -d "${search_root}" && ! -L "${search_root}" ]] || continue
+  while IFS= read -r -d '' candidate; do
+    planned_leaf_target "${candidate}" && continue
+    resolved="$("${realpath_bin}" -m -- "${candidate}")"
+    [[ -e "${resolved}" ]] && continue
+    relative="${candidate#"${home_dir}/"}"
+    for worktree_root in "${worktree_roots[@]}"; do
+      for package in "${selected[@]}"; do
+        if [[ "${resolved}" == "${worktree_root}/packages/${package}/${relative}" ]]; then
+          obsolete_links+=("${candidate}")
+          obsolete_values+=("$(readlink "${candidate}")")
+        fi
+      done
+    done
+  done < <(find "${search_root}" -type l -print0)
+done
+
 if [[ "${check}" == true ]]; then
-  # This walk certifies enumerated leaf/parent collisions and owned retargets.
-  # It deliberately does not predict obsolete-link removals made by --restow.
+  # The preflight certifies planned leaves and owned retargets, then reports
+  # obsolete links. It cannot predict every change made by Stow itself.
   for ((i = 0; i < ${#retarget_targets[@]}; i++)); do
     relative="$(
       "${realpath_bin}" -m \
         --relative-to="$(dirname "${retarget_targets[i]}")" "${retarget_expecteds[i]}"
     )"
     printf 'Would retarget: %s -> %s\n' "${retarget_targets[i]}" "${relative}"
+  done
+  for candidate in "${obsolete_links[@]}"; do
+    printf 'Would remove obsolete link: %s\n' "${candidate}"
   done
   exit 0
 fi
@@ -435,3 +491,14 @@ stow_active=true
 HOME="${stow_control_dir}" stow "${stow_args[@]}" "${selected[@]}"
 stow_active=false
 cd "${stow_working_dir}"
+
+# Recheck the exact symlink before deleting it: a concurrent edit must survive.
+for ((i = 0; i < ${#obsolete_links[@]}; i++)); do
+  candidate="${obsolete_links[i]}"
+  if [[ -L "${candidate}" \
+    && "$(readlink "${candidate}")" == "${obsolete_values[i]}" \
+    && ! -e "${candidate}" ]]; then
+    rm "${candidate}"
+    printf 'Removed obsolete link: %s\n' "${candidate}"
+  fi
+done
