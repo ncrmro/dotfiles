@@ -269,6 +269,25 @@ new_home() {
   (cd "${home}" && pwd -P)
 }
 
+# A deleted package source leaves a dangling Stow link that --restow cannot
+# discover. Cleanup must be scoped to the selected package and Git checkout.
+for source_root in canonical sibling; do
+  home="$(new_home "obsolete-zellij-${source_root}")"
+  mkdir -p "${home}/.config/zellij/themes"
+  obsolete="${home}/.config/zellij/themes/royal-green.kdl"
+  foreign="${home}/.config/zellij/themes/foreign.kdl"
+  ln -s "${test_root}/${source_root}/packages/zellij/.config/zellij/themes/royal-green.kdl" \
+    "${obsolete}"
+  ln -s "${test_root}/unrelated-missing.kdl" "${foreign}"
+  assert_check_plans "${home}" "${test_root}/canonical/install.sh" \
+    "Would remove obsolete link: ${obsolete}" zellij
+  HOME="${home}" "${test_root}/canonical/install.sh" zellij
+  test ! -L "${obsolete}"
+  test -L "${foreign}"
+  assert_check_clean "${home}" "${test_root}/canonical/install.sh" zellij
+  printf 'ok: obsolete Zellij link from %s removed\n' "${source_root}"
+done
+
 nested_installer_dir="${test_root}/canonical/nested-installer"
 mkdir -p "${nested_installer_dir}"
 cp "${repo_dir}/install.sh" "${nested_installer_dir}/install.sh"
