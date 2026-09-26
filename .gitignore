@@ -1,1 +1,4 @@
 !claude/.claude/settings.local.json
+
+# Local timezone choice made through Mod+Escape > System.
+packages/omarchy/.config/omarchy/timezone-override

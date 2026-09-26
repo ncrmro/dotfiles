@@ -1,0 +1,8 @@
+{
+  "system.timezone": {
+    "icon": "󰗵",
+    "label": "Time Zone",
+    "description": "Automatic or manual timezone",
+    "action": "keystone-timezone-menu"
+  }
+}
