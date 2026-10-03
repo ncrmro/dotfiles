@@ -22,15 +22,10 @@ packages/
   themes/           .config/keystone/theme-catalogs/user/
 ```
 
-Home Manager restows the selected packages during activation. To do the same
-manually, install GNU Stow and GNU coreutils first. `install.sh` uses the
-native GNU `realpath` and `mv` on Linux and Homebrew's `grealpath` and `gmv`
-on macOS. It exits with an installation hint when those commands are absent.
-Run it from the root of a Git 2.31-or-newer checkout. The installer rejects
-symlinks, empty directories, special entries, and package-local Stow ignore
-files inside selected packages. It runs Stow with empty resource and global
-ignore files, so compiled-in ignores and repository-local or user `~/.stowrc`
-options cannot change the validated plan.
+Keystone Terminal owns the shared `ks-stow-dotfiles` command and Home Manager
+integration. This repository's `install.sh` only delegates to that command,
+using this checkout and `$HOME`; without package arguments it selects `git ssh
+zsh`. Enable Keystone Terminal or install its shared dotfiles tool first.
 
 ```shell
 ./install.sh
@@ -38,26 +33,20 @@ options cannot change the validated plan.
 ./install.sh --check themes
 ```
 
-`--check` validates the selected packages' enumerated leaf targets, parent
-paths, and worktree-link ownership. `--check` also reports dangling links to
-deleted files in selected packages from this repository or its registered
-worktrees. Installation removes those links after Stow succeeds. If Stow is interrupted, its changes are not
-transactional; rerun the same install command reported by the installer.
+`--check` runs the same shared validation and Stow simulation as deployment.
+The shared installer checks selected package files and their exact destination
+paths. It does not search the home directory for stale links. Existing user
+files remain conflicts to resolve explicitly; installation does not adopt or
+overwrite them. Deleted or renamed files require an exact-path migration; see
+[MIGRATIONS.md](MIGRATIONS.md).
 
-Run the complete worktree-transition and fleet-package regression suite with:
-
-```shell
-./tests/run.sh
-```
-
-The suite requires Git 2.31 or newer, Bash 3.2 or newer, GNU Stow, GNU
-coreutils, Zsh, and
-`ssh-agent`. By default it also requires Nix with network access or an already
-populated store. The Hyprland composition test builds the pinned Hyprland
-revision and Lua 5.4 with Nix. To avoid those builds, set both `HYPRLAND_BIN`
-and `LUA_BIN` to compatible local executables; the Hyprland binary MUST still
-report the pinned version and revision. The suite uses disposable homes and a
-disposable package copy. It MUST NOT edit the tracked package checkout.
+Run the small wrapper tests with `./tests/install-wrapper.sh`. The shared
+installer's behavior tests live in `ks.systems/terminal`. Run this repository's
+package-content and fleet-composition suite with `./tests/run.sh`; it requires
+`ks-stow-dotfiles` on PATH, GNU coreutils, Zsh, and `ssh-agent`. The Hyprland
+composition test also builds pinned Hyprland and Lua 5.4 using Nix. Set both
+`HYPRLAND_BIN` and `LUA_BIN` to compatible local executables to avoid those
+builds. Tests use disposable homes and package copies.
 
 Configuration in `packages/` should refer to dependencies by executable name,
 not by `/nix/store` path, so Nix can continue to own dependency provisioning.
@@ -99,9 +88,8 @@ Each graphical host adds one host package:
 - `hyprland-delltop` provides the test-laptop monitor fallback.
 
 Theme directories that customize Hyprland provide `hyprland.lua`. The active
-theme selector points `~/.config/themes/current` at one theme directory. A
-normal `./install.sh` restow removes obsolete `hyprland.conf`, `ncrmro.conf`,
-and `host.conf` links after this migration.
+theme selector points `~/.config/themes/current` at one theme directory. Old `hyprland.conf`, `ncrmro.conf`, and `host.conf` links require the exact-path
+cleanup described in [MIGRATIONS.md](MIGRATIONS.md).
 
 `ks.systems/desktop` generates `.config/uwsm/env` because the generic session
 environment is runtime wiring. This repository retains

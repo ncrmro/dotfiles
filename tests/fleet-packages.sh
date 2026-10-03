@@ -190,37 +190,11 @@ compositions=(
   "ks-test-delltop:${terminal[*]} ${desktop[*]} hyprland-delltop"
 )
 
-seed_obsolete_stow_link() {
-  local source="$1"
-  local target="$2"
-
-  ln -s "$("${test_realpath}" -m --relative-to="$(dirname "${target}")" "${source}")" \
-    "${target}"
-}
-
 for composition in "${compositions[@]}"; do
   host="${composition%%:*}"
   read -r -a packages <<<"${composition#*:}"
   test_home="${test_root}/home-${host}"
   mkdir -p "${test_home}"
-
-  if [[ " ${packages[*]} " == *" hyprland-common "* ]]; then
-    mkdir -p "${test_home}/.config/hypr"
-    seed_obsolete_stow_link \
-      "${stow_root}/packages/hyprland-common/.config/hypr/hyprland.conf" \
-      "${test_home}/.config/hypr/hyprland.conf"
-    seed_obsolete_stow_link \
-      "${stow_root}/packages/hyprland-common/.config/hypr/ncrmro.conf" \
-      "${test_home}/.config/hypr/ncrmro.conf"
-  fi
-
-  for package in "${packages[@]}"; do
-    if [[ "${package}" == hyprland-* && "${package}" != "hyprland-common" ]]; then
-      seed_obsolete_stow_link \
-        "${stow_root}/packages/${package}/.config/hypr/host.conf" \
-        "${test_home}/.config/hypr/host.conf"
-    fi
-  done
 
   HOME="${test_home}" "${stow_root}/install.sh" "${packages[@]}"
   host_check_before="$(snapshot_tree "${test_home}")"
@@ -402,7 +376,7 @@ for graphical_command in \
   'ghostty' \
   'omarchy-menu toggle' \
   'omarchy-menu toggle apps' \
-  'chromium --new-window --ozone-platform=wayland' \
+  'google-chrome-stable --new-window --ozone-platform=wayland' \
   'nautilus --new-window' \
   'omarchy-menu toggle system' \
   'keystone-menu-keybindings' \

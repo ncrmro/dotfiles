@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Requirements: Bash 3.2+, Git 2.31+, GNU Stow/coreutils, Zsh, and ssh-agent.
+# Requirements: Bash 3.2+, Git 2.31+, ks-stow-dotfiles, GNU coreutils, Zsh, and ssh-agent.
 # By default the Hyprland suite also needs Nix plus network access or populated
 # store paths for pinned Hyprland and Lua 5.4 builds. Set both HYPRLAND_BIN and
 # LUA_BIN to compatible local executables to skip those builds; HYPRLAND_BIN
@@ -32,14 +32,12 @@ if grep -En 'm[a]pfile|read[a]rray|-p[r]intf|[(]realp[a]th[[:space:]]|sha256s[u]
   printf 'Installer/tests contain an unselected GNU command or a Bash-newer-than-3.2 primitive.\n' >&2
   exit 1
 fi
-# install.sh intentionally pairs find's null-delimited output with Bash 3.2
-# read -d; GNU and macOS/BSD find both support it. Tests should not add it.
 if grep -En -- '-print[0]' "${repo_dir}"/tests/*.sh; then
   printf 'Tests contain an unnecessary null-delimited find traversal.\n' >&2
   exit 1
 fi
 
-"${repo_dir}/tests/stow-worktrees.sh"
+"${repo_dir}/tests/install-wrapper.sh"
 "${repo_dir}/tests/fleet-packages.sh"
 
 after="$(git -C "${repo_dir}" status --porcelain=v1 --untracked-files=all)"
