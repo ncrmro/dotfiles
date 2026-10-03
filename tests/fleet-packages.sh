@@ -376,7 +376,7 @@ for graphical_command in \
   'ghostty' \
   'omarchy-menu toggle' \
   'omarchy-menu toggle apps' \
-  'chromium --new-window --ozone-platform=wayland' \
+  'google-chrome-stable --new-window --ozone-platform=wayland' \
   'nautilus --new-window' \
   'omarchy-menu toggle system' \
   'keystone-menu-keybindings' \
