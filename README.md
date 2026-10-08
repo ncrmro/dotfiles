@@ -128,6 +128,14 @@ Current scripts:
   session-bearing paths in that dir to `~/.claude`. `--resume` and `--continue`
   then list the same sessions under both `claude` and `claude-work`.
 
+## OBS desktop recording template
+
+The `obs` package installs an editable 16:9 desktop recording layout and an
+`obs-template` command. It generates native scene-collection/profile imports
+for macOS or Linux, with a circular webcam overlay and fit/fill desktop views.
+See [the OBS setup guide](docs/obs.md) for installation, device selection and
+saving later edits. OBS Studio and Python 3 must be provisioned on the host.
+
 ## Agent session palette spike
 
 The `zellij` package includes an `agent-sessions` command for a low-fidelity
