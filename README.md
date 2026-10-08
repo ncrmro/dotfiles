@@ -132,7 +132,8 @@ Current scripts:
 
 The `obs` package installs an editable 16:9 desktop recording layout and an
 `obs-template` command. It generates native scene-collection/profile imports
-for macOS or Linux, with a circular webcam overlay and fit/fill desktop views.
+for macOS or Linux, with a blurred circular webcam overlay, fit/fill desktop
+views, and a separate fullscreen Desk Cam scene.
 See [the OBS setup guide](docs/obs.md) for installation, device selection and
 saving later edits. OBS Studio and Python 3 must be provisioned on the host.
 

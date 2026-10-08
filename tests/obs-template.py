@@ -29,6 +29,12 @@ class ExportTests(unittest.TestCase):
                 sources = {s["name"]: s for s in data["sources"]}
                 self.assertEqual(sources["Desktop"]["id"], desktop_kind)
                 self.assertEqual(sources["Camera"]["id"], camera_kind)
+                self.assertEqual(sources["Desk Cam"]["id"], camera_kind)
+                self.assertNotIn("filters", sources["Desk Cam"])
+                desk_item = sources["Desk Cam — Fullscreen"]["settings"]["items"][0]
+                self.assertEqual(desk_item["source_uuid"], sources["Desk Cam"]["uuid"])
+                self.assertEqual(desk_item["bounds"], {"x": 1920, "y": 1080})
+                self.assertEqual(desk_item["bounds_type"], 2)
                 self.assertNotIn("device", sources["Camera"]["settings"])
                 self.assertNotIn("device_id", sources["Camera"]["settings"])
                 blur = sources["Camera"]["filters"][0]

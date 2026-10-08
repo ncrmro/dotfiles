@@ -49,7 +49,12 @@ Generate a fresh export on each machine so its asset path is correct.
 4. In **Webcam Circle**, open **Camera** Properties and select your webcam.
    On Linux you can preselect it with `--camera-device /dev/v4l/by-id/...`.
    Prefer a stable by-id device path over `/dev/video0`.
-5. Confirm the **Microphone** source is the desired input and set the recording
+5. In **Desk Cam — Fullscreen**, open **Desk Cam** Properties and select your
+   second camera. `--desk-camera-device` can preselect a Mac camera ID or a
+   Linux `/dev/v4l/by-id/...` device. Camera IDs are host-specific; two BRIOs
+   have the same display name but different IDs. Keep the face and desk
+   device selections separate.
+6. Confirm the **Microphone** source is the desired input and set the recording
    destination in Settings → Output. Make a short test recording.
 
 The template targets OBS 30.2 or newer. Linux needs OBS's built-in PipeWire,
@@ -73,6 +78,8 @@ for duplicated audio, especially with macOS screen capture.
   aspect ratio differs. This is the initial scene.
 - **Desktop — Fill** fills 16:9 with a centered crop. An ultrawide loses its
   left/right edges; a taller display loses its top/bottom edges.
+- **Desk Cam — Fullscreen** fits the second camera into the 16:9 canvas,
+  without background blur or a circle mask, so desk objects stay visible.
 - Both scenes reuse one desktop capture and one camera. A square nested scene
   crops the camera automatically before masking it, so the shape remains a
   circle when the camera resolution changes.
@@ -83,6 +90,7 @@ pixel while also filling 16:9 without distortion. Unlock a source to reposition
 the crop when the content you want is off-center.
 
 Edit `~/.config/obs-template/layout.json` to change the size, fps or margin.
+Set `desk_camera` to `false` on hosts where you do not want the second-camera scene.
 Generate into a new directory and import as a new version (change `name` to
 distinguish versions). OBS remains free to save machine-specific device choices
 in its own writable configuration. Do not Stow its entire live config directory

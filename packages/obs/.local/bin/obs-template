@@ -48,7 +48,7 @@ def scene(name, width, height, items):
     })
 
 
-def generate(config_dir, output, platform, camera_device):
+def generate(config_dir, output, platform, camera_device, desk_camera_device=None):
     layout = json.loads((config_dir / "layout.json").read_text())
     w, h, size, margin, fps = (layout[k] for k in
                               ("width", "height", "webcam_size", "margin", "fps"))
@@ -62,6 +62,9 @@ def generate(config_dir, output, platform, camera_device):
     blur = layout.get("background_blur", 0)
     if type(blur) is not int or not 0 <= blur <= 20:
         raise ValueError("background_blur must be an integer from 0 to 20")
+    desk_enabled = layout.get("desk_camera", False)
+    if type(desk_enabled) is not bool:
+        raise ValueError("desk_camera must be true or false")
     if not isinstance(name, str) or not name.strip() or "\n" in name or "\r" in name:
         raise ValueError("Name must be a nonempty single line")
     # Refuse to replace an existing generated export, including its device choices.
@@ -102,9 +105,22 @@ def generate(config_dir, output, platform, camera_device):
             item(desktop, 1, 0, 0, w, h, fill=fill),
             item(webcam, 2, w - size - margin, h - size - margin, size, size),
         ]))
+    extra_sources = []
+    if desk_enabled:
+        if platform == "macos":
+            desk = source("Desk Cam", "macos-avcapture", {
+                "enable_audio": False,
+                **({"device": desk_camera_device} if desk_camera_device else {}),
+            })
+        else:
+            desk = source("Desk Cam", "v4l2_input",
+                          {"device_id": desk_camera_device} if desk_camera_device else {})
+        extra_sources.append(desk)
+        views.append(scene("Desk Cam — Fullscreen", w, h,
+                           [item(desk, 1, 0, 0, w, h)]))
     collection = {
         "name": name, "version": 1,
-        "sources": [desktop, camera, webcam] + views,
+        "sources": [desktop, camera, webcam] + extra_sources + views,
         "AuxAudioDevice1": mic,
         "groups": [], "transitions": [], "quick_transitions": [],
         "scene_order": [{"name": v["name"]} for v in views] + [{"name": webcam["name"]}],
@@ -129,6 +145,8 @@ def generate(config_dir, output, platform, camera_device):
     print(f"Import Scene Collection → Import: {output / 'scene-collection.json'}")
     print(f"Import Profile → Import: {profile}")
     print("Select the imported profile and collection, then choose Desktop and Camera devices.")
+    if desk_enabled:
+        print("Choose the second camera in the Desk Cam source's Properties.")
     print("Keep this export directory in place: OBS references its circle-mask asset.")
 
 
@@ -139,11 +157,12 @@ def main():
     parser.add_argument("--platform", choices=("macos", "linux"),
                         default="macos" if sys.platform == "darwin" else "linux")
     parser.add_argument("--camera-device", help="Optional V4L2 device path or macOS camera ID")
+    parser.add_argument("--desk-camera-device", help="Optional device path or ID for the second camera")
     parser.add_argument("--output", required=True, type=Path, help="New directory for import files")
     args = parser.parse_args()
     try:
         generate(args.config_dir.expanduser().resolve(), args.output.expanduser().resolve(),
-                 args.platform, args.camera_device)
+                 args.platform, args.camera_device, args.desk_camera_device)
     except (OSError, ValueError, KeyError) as error:
         parser.exit(1, f"obs-template: {error}\n")
 
