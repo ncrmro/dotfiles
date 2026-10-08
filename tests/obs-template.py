@@ -35,6 +35,9 @@ class ExportTests(unittest.TestCase):
                 self.assertEqual(desk_item["source_uuid"], sources["Desk Cam"]["uuid"])
                 self.assertEqual(desk_item["bounds"], {"x": 1920, "y": 1080})
                 self.assertEqual(desk_item["bounds_type"], 2)
+                desk_overlay = sources["Desk Cam — Fullscreen"]["settings"]["items"][1]
+                self.assertEqual(desk_overlay["source_uuid"], sources["Webcam Circle"]["uuid"])
+                self.assertEqual(desk_overlay["pos"], {"x": 1600, "y": 760})
                 self.assertNotIn("device", sources["Camera"]["settings"])
                 self.assertNotIn("device_id", sources["Camera"]["settings"])
                 blur = sources["Camera"]["filters"][0]

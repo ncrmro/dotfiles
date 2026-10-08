@@ -117,7 +117,8 @@ def generate(config_dir, output, platform, camera_device, desk_camera_device=Non
                           {"device_id": desk_camera_device} if desk_camera_device else {})
         extra_sources.append(desk)
         views.append(scene("Desk Cam — Fullscreen", w, h,
-                           [item(desk, 1, 0, 0, w, h)]))
+                           [item(desk, 1, 0, 0, w, h),
+                            item(webcam, 2, w - size - margin, h - size - margin, size, size)]))
     collection = {
         "name": name, "version": 1,
         "sources": [desktop, camera, webcam] + extra_sources + views,

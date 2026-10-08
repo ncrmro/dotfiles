@@ -79,7 +79,9 @@ for duplicated audio, especially with macOS screen capture.
 - **Desktop — Fill** fills 16:9 with a centered crop. An ultrawide loses its
   left/right edges; a taller display loses its top/bottom edges.
 - **Desk Cam — Fullscreen** fits the second camera into the 16:9 canvas,
-  without background blur or a circle mask, so desk objects stay visible.
+  keeping desk objects clear, with the same blurred circular face-camera
+  overlay in the bottom-right corner. Background blur applies only to the
+  face camera.
 - Both scenes reuse one desktop capture and one camera. A square nested scene
   crops the camera automatically before masking it, so the shape remains a
   circle when the camera resolution changes.
