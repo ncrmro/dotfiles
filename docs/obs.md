@@ -46,7 +46,7 @@ Generate a fresh export on each machine so its asset path is correct.
 3. Open **Desktop** source Properties and select your display or window. On
    Linux this uses PipeWire and your desktop portal's share picker. On macOS
    grant OBS screen-recording permission if needed.
-4. In **Webcam Circle**, open **Camera** Properties and select your webcam.
+4. In **Intro — Face**, open **Camera** Properties and select your webcam.
    On Linux you can preselect it with `--camera-device /dev/v4l/by-id/...`.
    Prefer a stable by-id device path over `/dev/video0`.
 5. In **Desk Cam — Fullscreen**, open **Desk Cam** Properties and select your
@@ -65,8 +65,12 @@ official universal Mac package and restart OBS. On NixOS, include
 `pkgs.obs-studio-plugins.obs-backgroundremoval` in `programs.obs-studio.plugins`
 through the existing host configuration. Set `background_blur` to `0` in
 `layout.json` to generate a collection without that dependency.
-Desktop audio is not added separately. Enable it locally if needed and check
-for duplicated audio, especially with macOS screen capture.
+Every scene includes the same **Desktop Audio** source. On macOS it uses
+ScreenCaptureKit desktop audio; grant OBS system-audio capture permission.
+On Linux it captures the default PulseAudio/PipeWire output monitor; choose
+your playback device in its Properties if needed. The desktop video source
+is muted to avoid duplicate audio, and audio monitoring is disabled to avoid
+feedback. Check the Desktop Audio meter while playing sound before recording.
 
 ## Layout
 
@@ -78,17 +82,15 @@ for duplicated audio, especially with macOS screen capture.
   without the circle mask, desktop or desk camera. On macOS, a neutral built-in
   Color Correction filter on this scene provides the color-processing pass
   needed to avoid the overexposed fullscreen blur output observed in OBS 32.2.2.
-- **Desktop — Fit** keeps the entire desktop visible with black bars when its
-  aspect ratio differs. This is the initial scene.
-- **Desktop — Fill** fills 16:9 with a centered crop. An ultrawide loses its
+- **Desktop — Fill** is the initial scene and fills 16:9 with a centered crop. An ultrawide loses its
   left/right edges; a taller display loses its top/bottom edges.
 - **Desk Cam — Fullscreen** fits the second camera into the 16:9 canvas,
   keeping desk objects clear, with the same blurred circular face-camera
   overlay in the bottom-right corner. Background blur applies only to the
   face camera.
-- Both scenes reuse one desktop capture and one camera. A square nested scene
-  crops the camera automatically before masking it, so the shape remains a
-  circle when the camera resolution changes.
+- The three scenes share desktop audio and the face camera. Separate groups
+  crop the face camera to a square before masking it, so the overlays stay
+  circular without adding helper scenes to the scene selector.
 
 For readable tutorials, capture a 16:9 application window or use a matching
 desktop region. Neither fitting nor cropping can preserve every ultrawide

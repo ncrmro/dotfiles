@@ -78,11 +78,13 @@ def generate(config_dir, output, platform, camera_device, desk_camera_device=Non
         camera = source("Camera", "macos-avcapture",
                         {"enable_audio": False, **({"device": camera_device} if camera_device else {})})
         mic = source("Microphone", "coreaudio_input_capture", {"device_id": "default"})
+        audio = source("Desktop Audio", "sck_audio_capture", {"type": 0})
     else:
         desktop = source("Desktop", "pipewire-screen-capture-source")
         camera = source("Camera", "v4l2_input",
                         {"device_id": camera_device} if camera_device else {})
         mic = source("Microphone", "pulse_input_capture", {"device_id": "default"})
+        audio = source("Desktop Audio", "pulse_output_capture", {"device_id": "default"})
     if blur:
         camera["filters"] = [source("Background Blur", "background_removal", {
             "blur_background": blur,
@@ -92,25 +94,36 @@ def generate(config_dir, output, platform, camera_device, desk_camera_device=Non
             "feather": 0.1,
             "enable_focal_blur": False,
         })]
-    # Normalize any camera aspect ratio to a square before applying the round mask.
-    webcam = scene("Webcam Circle", size, size,
-                   [item(camera, 1, 0, 0, size, size, fill=True)])
-    webcam["filters"] = [source("Circle Mask", "mask_filter", {
-        "image_path": str(mask), "type": "mask_alpha_filter.effect",
-        "opacity": 1.0, "color": 16777215, "stretch": False,
-    }, versioned_id="mask_filter_v2")]
-    intro = scene("Intro — Face", w, h, [item(camera, 1, 0, 0, w, h)])
+    # Separate groups keep circular overlays out of the navigable scene list.
+    desktop["muted"] = True  # The dedicated source captures system audio once.
+    desktop["monitoring_type"] = 0
+    audio["monitoring_type"] = 0
+    def overlay(name):
+        group = source(name, "group", {
+            "custom_size": False, "id_counter": 1,
+            "items": [item(camera, 1, 0, 0, size, size, fill=True)],
+        })
+        group["filters"] = [source(name + " Mask", "mask_filter", {
+            "image_path": str(mask), "type": "mask_alpha_filter.effect",
+            "opacity": 1.0, "color": 16777215, "stretch": False,
+        }, versioned_id="mask_filter_v2")]
+        return group
+
+    desktop_overlay = overlay("Desktop Face Overlay")
+    groups = [desktop_overlay]
+    intro = scene("Intro — Face", w, h, [item(camera, 1, 0, 0, w, h),
+                                             item(audio, 2, 0, 0, 0, 0)])
     if blur and platform == "macos":
         # A neutral SDR processing pass fixes the background-removal plugin's
         # overexposed fullscreen output on the verified Mac OBS configuration.
         intro["filters"] = [source("Color Processing", "color_filter",
                                    versioned_id="color_filter_v2")]
     views = [intro]
-    for label, fill in (("Desktop — Fit", False), ("Desktop — Fill", True)):
-        views.append(scene(label, w, h, [
-            item(desktop, 1, 0, 0, w, h, fill=fill),
-            item(webcam, 2, w - size - margin, h - size - margin, size, size),
-        ]))
+    views.append(scene("Desktop — Fill", w, h, [
+        item(desktop, 1, 0, 0, w, h, fill=True),
+        item(desktop_overlay, 2, w - size - margin, h - size - margin, size, size),
+        item(audio, 3, 0, 0, 0, 0),
+    ]))
     extra_sources = []
     if desk_enabled:
         if platform == "macos":
@@ -122,16 +135,19 @@ def generate(config_dir, output, platform, camera_device, desk_camera_device=Non
             desk = source("Desk Cam", "v4l2_input",
                           {"device_id": desk_camera_device} if desk_camera_device else {})
         extra_sources.append(desk)
+        desk_overlay = overlay("Desk Face Overlay")
+        groups.append(desk_overlay)
         views.append(scene("Desk Cam — Fullscreen", w, h,
                            [item(desk, 1, 0, 0, w, h),
-                            item(webcam, 2, w - size - margin, h - size - margin, size, size)]))
+                            item(desk_overlay, 2, w - size - margin, h - size - margin, size, size),
+                            item(audio, 3, 0, 0, 0, 0)]))
     collection = {
         "name": name, "version": 1,
-        "sources": [desktop, camera, webcam] + extra_sources + views,
+        "sources": [desktop, camera, audio] + extra_sources + views,
         "AuxAudioDevice1": mic,
-        "groups": [], "transitions": [], "quick_transitions": [],
-        "scene_order": [{"name": v["name"]} for v in views] + [{"name": webcam["name"]}],
-        "current_scene": "Desktop — Fit", "current_program_scene": "Desktop — Fit",
+        "groups": groups, "transitions": [], "quick_transitions": [],
+        "scene_order": [{"name": v["name"]} for v in views],
+        "current_scene": "Desktop — Fill", "current_program_scene": "Desktop — Fill",
         "current_transition": "Fade", "transition_duration": 300,
     }
     (output / "scene-collection.json").write_text(json.dumps(collection, indent=2) + "\n")

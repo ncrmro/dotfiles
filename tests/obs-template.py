@@ -26,7 +26,7 @@ class ExportTests(unittest.TestCase):
                                 "--platform", platform, "--output", str(output)],
                                check=True, capture_output=True)
                 data = json.loads((output / "scene-collection.json").read_text())
-                sources = {s["name"]: s for s in data["sources"]}
+                sources = {s["name"]: s for s in data["sources"] + data["groups"]}
                 self.assertEqual(sources["Desktop"]["id"], desktop_kind)
                 self.assertEqual(sources["Camera"]["id"], camera_kind)
                 self.assertEqual(sources["Desk Cam"]["id"], camera_kind)
@@ -36,7 +36,7 @@ class ExportTests(unittest.TestCase):
                 self.assertEqual(desk_item["bounds"], {"x": 1920, "y": 1080})
                 self.assertEqual(desk_item["bounds_type"], 2)
                 desk_overlay = sources["Desk Cam — Fullscreen"]["settings"]["items"][1]
-                self.assertEqual(desk_overlay["source_uuid"], sources["Webcam Circle"]["uuid"])
+                self.assertEqual(desk_overlay["source_uuid"], sources["Desk Face Overlay"]["uuid"])
                 self.assertEqual(desk_overlay["pos"], {"x": 1600, "y": 760})
                 self.assertNotIn("device", sources["Camera"]["settings"])
                 self.assertNotIn("device_id", sources["Camera"]["settings"])
@@ -45,7 +45,7 @@ class ExportTests(unittest.TestCase):
                 self.assertEqual(blur["settings"]["blur_background"], 8)
                 self.assertEqual(blur["settings"]["useGPU"], "coreml" if platform == "macos" else "cpu")
                 intro = sources["Intro — Face"]["settings"]["items"]
-                self.assertEqual(len(intro), 1)
+                self.assertEqual(len(intro), 2)
                 self.assertEqual(intro[0]["source_uuid"], sources["Camera"]["uuid"])
                 self.assertEqual(intro[0]["bounds"], {"x": 1920, "y": 1080})
                 self.assertEqual(intro[0]["pos"], {"x": 0, "y": 0})
@@ -55,15 +55,33 @@ class ExportTests(unittest.TestCase):
                 for source in sources.values():
                     for item in source["settings"].get("items", []):
                         self.assertIn(item["source_uuid"], uuids)
-                for name, mode in (("Desktop — Fit", 2), ("Desktop — Fill", 3)):
-                    items = sources[name]["settings"]["items"]
-                    self.assertEqual(items[0]["bounds_type"], mode)
-                    self.assertEqual(items[1]["pos"], {"x": 1600, "y": 760})
-                webcam = sources["Webcam Circle"]
-                self.assertEqual((webcam["settings"]["cx"], webcam["settings"]["cy"]), (280, 280))
-                mask = Path(webcam["filters"][0]["settings"]["image_path"])
-                self.assertTrue(mask.is_file())
-                self.assertEqual(mask.read_bytes(), (CONFIG / "circle-mask.png").read_bytes())
+                self.assertEqual({v["name"] for v in data["scene_order"]},
+                                 {"Desktop — Fill", "Desk Cam — Fullscreen", "Intro — Face"})
+                self.assertNotIn("Webcam Circle", sources)
+                self.assertNotIn("Desktop — Fit", sources)
+                self.assertTrue(sources["Desktop"]["muted"])
+                audio = sources["Desktop Audio"]
+                self.assertEqual(audio["id"], "sck_audio_capture" if platform == "macos" else "pulse_output_capture")
+                self.assertFalse(audio["muted"])
+                self.assertEqual(audio["monitoring_type"], 0)
+                for view in data["scene_order"]:
+                    items = sources[view["name"]]["settings"]["items"]
+                    capture = [i for i in items if i["source_uuid"] == audio["uuid"]]
+                    self.assertEqual(len(capture), 1)
+                    self.assertTrue(capture[0]["visible"])
+                desktop_items = sources["Desktop — Fill"]["settings"]["items"]
+                self.assertEqual(desktop_items[0]["bounds_type"], 3)
+                self.assertEqual(desktop_items[1]["pos"], {"x": 1600, "y": 760})
+                self.assertEqual(desktop_items[1]["source_uuid"], sources["Desktop Face Overlay"]["uuid"])
+                for group in data["groups"]:
+                    self.assertEqual(group["id"], "group")
+                    child = group["settings"]["items"][0]
+                    self.assertEqual(child["source_uuid"], sources["Camera"]["uuid"])
+                    self.assertEqual(child["bounds"], {"x": 280, "y": 280})
+                    self.assertTrue(child["bounds_crop"])
+                    mask = Path(group["filters"][0]["settings"]["image_path"])
+                    self.assertTrue(mask.is_file())
+                    self.assertEqual(mask.read_bytes(), (CONFIG / "circle-mask.png").read_bytes())
                 profile = configparser.ConfigParser()
                 profile.read(output / "profile/basic.ini")
                 self.assertEqual(profile["Video"]["BaseCX"], "1920")
