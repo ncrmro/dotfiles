@@ -48,7 +48,8 @@ def scene(name, width, height, items):
     })
 
 
-def generate(config_dir, output, platform, camera_device, desk_camera_device=None):
+def generate(config_dir, output, platform, camera_device, desk_camera_device=None,
+             ableton_audio_device="obs_ableton.monitor"):
     layout = json.loads((config_dir / "layout.json").read_text())
     w, h, size, margin, fps = (layout[k] for k in
                               ("width", "height", "webcam_size", "margin", "fps"))
@@ -78,13 +79,15 @@ def generate(config_dir, output, platform, camera_device, desk_camera_device=Non
         camera = source("Camera", "macos-avcapture",
                         {"enable_audio": False, **({"device": camera_device} if camera_device else {})})
         mic = source("Microphone", "coreaudio_input_capture", {"device_id": "default"})
-        audio = source("Desktop Audio", "sck_audio_capture", {"type": 0})
+        audio = source("Ableton Audio", "sck_audio_capture",
+                       {"type": 1, "application": "com.ableton.live"})
     else:
         desktop = source("Desktop", "pipewire-screen-capture-source")
         camera = source("Camera", "v4l2_input",
                         {"device_id": camera_device} if camera_device else {})
         mic = source("Microphone", "pulse_input_capture", {"device_id": "default"})
-        audio = source("Desktop Audio", "pulse_output_capture", {"device_id": "default"})
+        audio = source("Ableton Audio", "pulse_output_capture",
+                       {"device_id": ableton_audio_device})
     if blur:
         camera["filters"] = [source("Background Blur", "background_removal", {
             "blur_background": blur,
@@ -181,11 +184,14 @@ def main():
                         default="macos" if sys.platform == "darwin" else "linux")
     parser.add_argument("--camera-device", help="Optional V4L2 device path or macOS camera ID")
     parser.add_argument("--desk-camera-device", help="Optional device path or ID for the second camera")
+    parser.add_argument("--ableton-audio-device", default="obs_ableton.monitor",
+                        help="Linux monitor device for a dedicated Ableton playback sink")
     parser.add_argument("--output", required=True, type=Path, help="New directory for import files")
     args = parser.parse_args()
     try:
         generate(args.config_dir.expanduser().resolve(), args.output.expanduser().resolve(),
-                 args.platform, args.camera_device, args.desk_camera_device)
+                 args.platform, args.camera_device, args.desk_camera_device,
+                 args.ableton_audio_device)
     except (OSError, ValueError, KeyError) as error:
         parser.exit(1, f"obs-template: {error}\n")
 

@@ -60,8 +60,13 @@ class ExportTests(unittest.TestCase):
                 self.assertNotIn("Webcam Circle", sources)
                 self.assertNotIn("Desktop — Fit", sources)
                 self.assertTrue(sources["Desktop"]["muted"])
-                audio = sources["Desktop Audio"]
+                audio = sources["Ableton Audio"]
                 self.assertEqual(audio["id"], "sck_audio_capture" if platform == "macos" else "pulse_output_capture")
+                if platform == "macos":
+                    self.assertEqual(audio["settings"], {"type": 1, "application": "com.ableton.live"})
+                else:
+                    self.assertEqual(audio["settings"]["device_id"], "obs_ableton.monitor")
+                self.assertNotIn("Desktop Audio", sources)
                 self.assertFalse(audio["muted"])
                 self.assertEqual(audio["monitoring_type"], 0)
                 for view in data["scene_order"]:

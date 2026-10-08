@@ -65,12 +65,32 @@ official universal Mac package and restart OBS. On NixOS, include
 `pkgs.obs-studio-plugins.obs-backgroundremoval` in `programs.obs-studio.plugins`
 through the existing host configuration. Set `background_blur` to `0` in
 `layout.json` to generate a collection without that dependency.
-Every scene includes the same **Desktop Audio** source. On macOS it uses
-ScreenCaptureKit desktop audio; grant OBS system-audio capture permission.
-On Linux it captures the default PulseAudio/PipeWire output monitor; choose
-your playback device in its Properties if needed. The desktop video source
-is muted to avoid duplicate audio, and audio monitoring is disabled to avoid
-feedback. Check the Desktop Audio meter while playing sound before recording.
+Every scene includes the same **Ableton Audio** source. On macOS it captures
+only the application with bundle ID `com.ableton.live` using ScreenCaptureKit;
+open Ableton Live and grant OBS audio-capture permission. Browser audio and
+other applications are excluded. Keep **Audio Monitoring → Monitor Off** for
+Ableton Audio and Microphone: Live already provides the playback you hear.
+Monitoring the captured playback again can produce a delayed duplicate through
+speakers, which the microphone can pick up. The desktop video source stays muted.
+If Live also monitors your voice, that voice can reach OBS both through Ableton
+and through its Microphone source; use only one voice path for the recording.
+
+On Linux the source targets a dedicated playback sink's monitor,
+`obs_ableton.monitor`, rather than the whole desktop. With PipeWire's PulseAudio
+compatibility service, create the sink before opening OBS:
+
+```sh
+pactl load-module module-null-sink sink_name=obs_ableton \
+  sink_properties=device.description=AbletonOBS
+```
+
+Route only the intended application's playback to that sink using your audio
+routing tool. Configure listening in that tool while keeping OBS monitoring off.
+A different dedicated sink can be selected with
+`--ableton-audio-device YOUR_SINK.monitor`. This route must exist locally;
+the generator does not create it or change application routing. A missing sink
+produces silence. Check the Ableton Audio meter while playing audio in Live
+before recording, and confirm other applications do not reach it.
 
 ## Layout
 
@@ -88,7 +108,7 @@ feedback. Check the Desktop Audio meter while playing sound before recording.
   keeping desk objects clear, with the same blurred circular face-camera
   overlay in the bottom-right corner. Background blur applies only to the
   face camera.
-- The three scenes share desktop audio and the face camera. Separate groups
+- The three scenes share Ableton audio and the face camera. Separate groups
   crop the face camera to a square before masking it, so the overlays stay
   circular without adding helper scenes to the scene selector.
 
@@ -128,3 +148,7 @@ When automating OBS 32.2.2 on macOS over WebSocket, avoid enumerating the
 `display_uuid` source property: [OBS issue #13905](https://github.com/obsproject/obs-studio/issues/13905)
 documents a crash in that request. Select a display in OBS Properties, or obtain
 its UUID directly from macOS and set it without listing the property.
+
+OBS 32.2.2 on this Mac also crashed while enumerating the audio source's
+`application` property over WebSocket. Set the known Ableton bundle ID directly;
+avoid that property-list request.
