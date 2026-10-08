@@ -8,7 +8,8 @@ circle mask, with a Python 3 command to generate native imports for each OS.
 
 ## Install and generate
 
-Provision OBS Studio and Python 3 on the host, then select the `obs` dotfiles
+Provision OBS Studio, Python 3 and the [OBS Background Removal plugin](https://github.com/royshil/obs-backgroundremoval)
+on the host, then select the `obs` dotfiles
 package alongside your existing packages:
 
 ```sh
@@ -54,6 +55,11 @@ Generate a fresh export on each machine so its asset path is correct.
 The template targets OBS 30.2 or newer. Linux needs OBS's built-in PipeWire,
 V4L2 and PulseAudio sources, plus a working XDG desktop portal; no extra circle
 mask plugin is required. The built-in Image Mask/Blend filter does that job.
+The default background blur requires OBS Background Removal. Install its
+official universal Mac package and restart OBS. On NixOS, include
+`pkgs.obs-studio-plugins.obs-backgroundremoval` in `programs.obs-studio.plugins`
+through the existing host configuration. Set `background_blur` to `0` in
+`layout.json` to generate a collection without that dependency.
 Desktop audio is not added separately. Enable it locally if needed and check
 for duplicated audio, especially with macOS screen capture.
 
@@ -61,6 +67,8 @@ for duplicated audio, especially with macOS screen capture.
 
 - Canvas and output: **1920×1080, 16:9, 30 fps**.
 - Webcam: **280-pixel circle**, bottom right, **40-pixel margin**.
+- Background blur: **8/20**, lightweight Selfie Segmentation, applied to the
+  camera before the circle mask. macOS uses CoreML; Linux uses two CPU threads.
 - **Desktop — Fit** keeps the entire desktop visible with black bars when its
   aspect ratio differs. This is the initial scene.
 - **Desktop — Fill** fills 16:9 with a centered crop. An ultrawide loses its

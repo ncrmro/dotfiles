@@ -59,6 +59,9 @@ def generate(config_dir, output, platform, camera_device):
     if type(margin) is not int or margin < 0 or size + 2 * margin > min(w, h):
         raise ValueError("Webcam and margins must fit within the canvas")
     name = layout["name"]
+    blur = layout.get("background_blur", 0)
+    if type(blur) is not int or not 0 <= blur <= 20:
+        raise ValueError("background_blur must be an integer from 0 to 20")
     if not isinstance(name, str) or not name.strip() or "\n" in name or "\r" in name:
         raise ValueError("Name must be a nonempty single line")
     # Refuse to replace an existing generated export, including its device choices.
@@ -77,6 +80,15 @@ def generate(config_dir, output, platform, camera_device):
         camera = source("Camera", "v4l2_input",
                         {"device_id": camera_device} if camera_device else {})
         mic = source("Microphone", "pulse_input_capture", {"device_id": "default"})
+    if blur:
+        camera["filters"] = [source("Background Blur", "background_removal", {
+            "blur_background": blur,
+            "model_select": "models/selfie_segmentation.with_runtime_opt.ort",
+            "useGPU": "coreml" if platform == "macos" else "cpu",
+            "numThreads": 2,
+            "feather": 0.1,
+            "enable_focal_blur": False,
+        })]
     # Normalize any camera aspect ratio to a square before applying the round mask.
     webcam = scene("Webcam Circle", size, size,
                    [item(camera, 1, 0, 0, size, size, fill=True)])

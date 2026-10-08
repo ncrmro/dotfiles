@@ -31,6 +31,10 @@ class ExportTests(unittest.TestCase):
                 self.assertEqual(sources["Camera"]["id"], camera_kind)
                 self.assertNotIn("device", sources["Camera"]["settings"])
                 self.assertNotIn("device_id", sources["Camera"]["settings"])
+                blur = sources["Camera"]["filters"][0]
+                self.assertEqual(blur["id"], "background_removal")
+                self.assertEqual(blur["settings"]["blur_background"], 8)
+                self.assertEqual(blur["settings"]["useGPU"], "coreml" if platform == "macos" else "cpu")
                 uuids = {s["uuid"] for s in sources.values()}
                 for source in sources.values():
                     for item in source["settings"].get("items", []):
