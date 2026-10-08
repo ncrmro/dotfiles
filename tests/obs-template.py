@@ -44,6 +44,13 @@ class ExportTests(unittest.TestCase):
                 self.assertEqual(blur["id"], "background_removal")
                 self.assertEqual(blur["settings"]["blur_background"], 8)
                 self.assertEqual(blur["settings"]["useGPU"], "coreml" if platform == "macos" else "cpu")
+                intro = sources["Intro — Face"]["settings"]["items"]
+                self.assertEqual(len(intro), 1)
+                self.assertEqual(intro[0]["source_uuid"], sources["Camera"]["uuid"])
+                self.assertEqual(intro[0]["bounds"], {"x": 1920, "y": 1080})
+                self.assertEqual(intro[0]["pos"], {"x": 0, "y": 0})
+                if platform == "macos":
+                    self.assertEqual(sources["Intro — Face"]["filters"][0]["versioned_id"], "color_filter_v2")
                 uuids = {s["uuid"] for s in sources.values()}
                 for source in sources.values():
                     for item in source["settings"].get("items", []):

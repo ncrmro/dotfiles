@@ -99,7 +99,13 @@ def generate(config_dir, output, platform, camera_device, desk_camera_device=Non
         "image_path": str(mask), "type": "mask_alpha_filter.effect",
         "opacity": 1.0, "color": 16777215, "stretch": False,
     }, versioned_id="mask_filter_v2")]
-    views = []
+    intro = scene("Intro — Face", w, h, [item(camera, 1, 0, 0, w, h)])
+    if blur and platform == "macos":
+        # A neutral SDR processing pass fixes the background-removal plugin's
+        # overexposed fullscreen output on the verified Mac OBS configuration.
+        intro["filters"] = [source("Color Processing", "color_filter",
+                                   versioned_id="color_filter_v2")]
+    views = [intro]
     for label, fill in (("Desktop — Fit", False), ("Desktop — Fill", True)):
         views.append(scene(label, w, h, [
             item(desktop, 1, 0, 0, w, h, fill=fill),
@@ -125,7 +131,7 @@ def generate(config_dir, output, platform, camera_device, desk_camera_device=Non
         "AuxAudioDevice1": mic,
         "groups": [], "transitions": [], "quick_transitions": [],
         "scene_order": [{"name": v["name"]} for v in views] + [{"name": webcam["name"]}],
-        "current_scene": views[0]["name"], "current_program_scene": views[0]["name"],
+        "current_scene": "Desktop — Fit", "current_program_scene": "Desktop — Fit",
         "current_transition": "Fade", "transition_duration": 300,
     }
     (output / "scene-collection.json").write_text(json.dumps(collection, indent=2) + "\n")

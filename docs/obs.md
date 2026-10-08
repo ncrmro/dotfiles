@@ -74,6 +74,10 @@ for duplicated audio, especially with macOS screen capture.
 - Webcam: **280-pixel circle**, bottom right, **40-pixel margin**.
 - Background blur: **8/20**, lightweight Selfie Segmentation, applied to the
   camera before the circle mask. macOS uses CoreML; Linux uses two CPU threads.
+- **Intro — Face** shows the same blurred face camera fullscreen for introductions,
+  without the circle mask, desktop or desk camera. On macOS, a neutral built-in
+  Color Correction filter on this scene provides the color-processing pass
+  needed to avoid the overexposed fullscreen blur output observed in OBS 32.2.2.
 - **Desktop — Fit** keeps the entire desktop visible with black bars when its
   aspect ratio differs. This is the initial scene.
 - **Desktop — Fill** fills 16:9 with a centered crop. An ultrawide loses its
