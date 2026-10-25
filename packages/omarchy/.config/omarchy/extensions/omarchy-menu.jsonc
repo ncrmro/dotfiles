@@ -4,5 +4,12 @@
     "label": "Time Zone",
     "description": "Automatic or manual timezone",
     "action": "keystone-timezone-menu"
+  },
+  "system.windows": {
+    "icon": "󰍲",
+    "label": "Switch to Windows",
+    "description": "Closes Linux apps; Linux returns after Windows shuts down",
+    "when": "command -v keystone-switch-to-windows >/dev/null 2>&1",
+    "action": "keystone-switch-to-windows"
   }
 }
