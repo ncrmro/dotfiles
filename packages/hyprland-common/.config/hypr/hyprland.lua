@@ -18,7 +18,7 @@ hl.config({
     kb_options = "ctrl:nocaps,altwin:swap_alt_win",
     scroll_factor = 0.4,
     sensitivity = 0,
-    touchpad = { drag_lock = 0, natural_scroll = true },
+    touchpad = { drag_lock = 0, drag_3fg = 1, natural_scroll = true },
   },
   master = { new_status = "master" },
   misc = {
